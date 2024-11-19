@@ -1,0 +1,18 @@
+[package]
+name = "wvara_vft_wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+wvara-vft-app = { path = "../app" }
+sails-rs.workspace = true
+
+[build-dependencies]
+gwasm-builder.workspace = true
+sails-idl-gen.workspace = true
+wvara-vft-app = { path = "../app" }
+
+[lib]
+crate-type = ["rlib"]
+name = "wvara_vft_wasm"

@@ -1,0 +1,13 @@
+[package]
+name = "lp_vara_dex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+gstd.workspace = true
+sails-rs.workspace = true
+log.workspace = true
+parity-scale-codec.workspace = true
+scale-info.workspace = true
+vft-service.workspace = true

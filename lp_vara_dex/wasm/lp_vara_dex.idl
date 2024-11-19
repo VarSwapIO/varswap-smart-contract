@@ -1,0 +1,75 @@
+type LpError = enum {
+  /// An insufficient amount of the A or B token was provided.
+  InsufficientAmount,
+  /// A specified amount limit of the former tokens has been exceeded.
+  InsufficientFormerAmount,
+  /// A specified amount limit of the latter tokens has been exceeded.
+  InsufficientLatterAmount,
+  /// An insufficient amount of liquidity tokens was provided, or the contract
+  /// doesn't have enough of them to continue an action.
+  InsufficientLiquidity,
+  /// An invalid recipient was specified.
+  InvalidRecipient,
+  ZeroActorId,
+  /// One of the contract's FT contracts failed to complete a transfer
+  /// action.
+  /// 
+  /// Most often, the reason is that a user didn't give an approval to the
+  /// contract or didn't have enough tokens to transfer.
+  TransferFailed,
+  /// An overflow occurred during calculations.
+  Overflow,
+  /// A specified deadline for an action was exceeded.
+  DeadlineExceeded,
+  IdenticalTokens,
+  /// linked Factory contract.
+  FeeToGettingFailed,
+  InvalidTokens,
+  InvalidRouter,
+  CanNotConnectToVft,
+  InsufficientLiquidityMinted,
+  InsufficientLiquidityBurned,
+  InsufficientOutputAmount,
+  InsufficientInputAmount,
+  KConstant,
+  InvalidTo,
+  CanNotConnectToFactory,
+};
+
+constructor {
+  New : (factory: actor_id, token_a: actor_id, token_b: actor_id, name: str, symbol: str, decimals: u8);
+};
+
+service LpService {
+  Burn : (to: actor_id) -> result (struct { u256, u256 }, LpError);
+  Mint : (to: actor_id) -> result (u256, LpError);
+  Skim : (to: actor_id) -> result (null, LpError);
+  Swap : (amount0_out: u256, amount1_out: u256, to: actor_id) -> result (null, LpError);
+  Sync : () -> result (null, LpError);
+  Approve : (spender: actor_id, value: u256) -> bool;
+  Transfer : (to: actor_id, value: u256) -> bool;
+  TransferFrom : (from: actor_id, to: actor_id, value: u256) -> bool;
+  query GetReserves : () -> struct { u256, u256, u64 };
+  query Allowance : (owner: actor_id, spender: actor_id) -> u256;
+  query BalanceOf : (account: actor_id) -> u256;
+  query Decimals : () -> u8;
+  query Name : () -> str;
+  query Symbol : () -> str;
+  query TotalSupply : () -> u256;
+
+  events {
+    Mint: struct { sender: actor_id, amount: struct { u256, u256 } };
+    Burn: struct { sender: actor_id, amount: struct { u256, u256 }, to: actor_id };
+    /// Should be returned from
+    /// [`InnerAction::SwapExactTokensForTokens`]/[`InnerAction::SwapTokensForExactTokens`].
+    Swap: struct { sender: actor_id, amount_in: struct { u256, u256 }, amount_out: struct { u256, u256 }, to: actor_id };
+    GetReserves: struct { reserve_a: u128, reserve_b: u128, block_timestamp_last: u64 };
+    /// Should be returned from [`InnerAction::Sync`].
+    Sync: struct { reserve_a: u256, reserve_b: u256 };
+    /// Should be returned from [`InnerAction::Skim`].
+    Skim: struct { amount_a: u256, amount_b: u256, to: actor_id };
+    Approval: struct { owner: actor_id, spender: actor_id, value: u256 };
+    Transfer: struct { from: actor_id, to: actor_id, value: u256 };
+  }
+};
+

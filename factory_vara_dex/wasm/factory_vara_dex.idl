@@ -1,0 +1,32 @@
+type FactoryError = enum {
+  Unauthorized,
+  UnexpectedFTEvent,
+  MessageSendError,
+  NotFound,
+  PairExist,
+  PairCreationFailed,
+  PairNotExist,
+  VFTError,
+};
+
+constructor {
+  New : (code_id_pair: code_id, fee_to: actor_id, fee_to_setter: actor_id);
+};
+
+service FactoryService {
+  CreatePair : (token_a: actor_id, token_b: actor_id) -> result (actor_id, FactoryError);
+  SetFeeTo : (new_fee_to: actor_id) -> result (null, FactoryError);
+  SetFeeToSetter : (new_fee_setter: actor_id) -> result (null, FactoryError);
+  query GetFeeTo : () -> actor_id;
+  query GetFeeToSetter : () -> actor_id;
+  query GetPair : (token_a: actor_id, token_b: actor_id) -> actor_id;
+  query GetPairLength : () -> u64;
+
+  events {
+    PairCreated: struct { token_pair: struct { actor_id, actor_id }, pair_address: actor_id, pair_number: u64 };
+    FeeToSetterSet: actor_id;
+    FeeToSet: actor_id;
+    Pair: actor_id;
+  }
+};
+

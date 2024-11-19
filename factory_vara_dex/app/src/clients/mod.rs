@@ -1,0 +1,1 @@
+pub mod extended_new_vft;
