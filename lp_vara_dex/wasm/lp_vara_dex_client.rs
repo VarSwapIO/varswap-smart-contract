@@ -378,6 +378,10 @@ pub mod lp_service {
         #[derive(PartialEq, Debug, Encode, Decode)]
         #[codec(crate = sails_rs::scale_codec)]
         pub enum LpServiceEvents {
+            LPMint {
+                to: ActorId,
+                amount: U256,
+            },
             Mint {
                 sender: ActorId,
                 amount: (U256, U256),
@@ -401,7 +405,10 @@ pub mod lp_service {
                 block_timestamp_last: u64,
             },
             /// Should be returned from [`InnerAction::Sync`].
-            Sync { reserve_a: U256, reserve_b: U256 },
+            Sync {
+                reserve_a: U256,
+                reserve_b: U256,
+            },
             /// Should be returned from [`InnerAction::Skim`].
             Skim {
                 amount_a: U256,
@@ -422,6 +429,7 @@ pub mod lp_service {
         impl EventIo for LpServiceEvents {
             const ROUTE: &'static [u8] = &[36, 76, 112, 83, 101, 114, 118, 105, 99, 101];
             const EVENT_NAMES: &'static [&'static [u8]] = &[
+                &[24, 76, 80, 77, 105, 110, 116],
                 &[16, 77, 105, 110, 116],
                 &[16, 66, 117, 114, 110],
                 &[16, 83, 119, 97, 112],

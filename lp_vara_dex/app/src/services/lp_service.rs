@@ -81,6 +81,8 @@ impl LPService {
         //update total supply
         let total_supply = Storage::total_supply();
         *total_supply =  total_supply.checked_add(liquidity).unwrap();
+
+        self.notify_on(LPEvent::LPMint { to, amount: liquidity }).unwrap();
     }
 
     fn _burn(&mut self, from:ActorId, liquidity:U256) {

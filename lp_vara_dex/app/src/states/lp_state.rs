@@ -30,6 +30,11 @@ impl StateLp {
 #[codec(crate = gstd::codec)]
 #[scale_info(crate = gstd::scale_info)]
 pub enum LPEvent {
+
+    LPMint {
+        to:ActorId,
+        amount:U256
+    },
   
     Mint {
         sender: ActorId,

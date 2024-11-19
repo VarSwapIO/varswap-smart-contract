@@ -58,6 +58,7 @@ service LpService {
   query TotalSupply : () -> u256;
 
   events {
+    LPMint: struct { to: actor_id, amount: u256 };
     Mint: struct { sender: actor_id, amount: struct { u256, u256 } };
     Burn: struct { sender: actor_id, amount: struct { u256, u256 }, to: actor_id };
     /// Should be returned from
