@@ -1,0 +1,27 @@
+[workspace]
+
+members = ["client"]
+
+
+[package]
+name = "lp_staking"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lp_staking_app = { path = "app" }
+
+
+[build-dependencies]
+lp_staking_app = { path = "app" }
+sails-rs = { version = "0.6.3", features = ["wasm-builder"] }
+sails-idl-gen = "0.6.3"
+
+[dev-dependencies]
+lp_staking = { path = ".", features = ["wasm-binary"] }
+lp_staking_client = { path = "client" }
+sails-rs = { version = "0.6.3", features = ["gtest"] }
+tokio = { version = "1.41", features = ["rt", "macros"] }
+
+[features]
+wasm-binary = []

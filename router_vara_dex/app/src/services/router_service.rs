@@ -272,8 +272,10 @@ impl RouterService {
         };
         if !transfer_token_status {
             return Err(RouterError::TransferFromFailed);
+        }else {
+            Ok(())
         }
-        Ok(())
+        
     }
 
     async fn _transfer(&mut self, token:ActorId, to: ActorId, value:U256) -> Result<(),RouterError>{
@@ -283,8 +285,10 @@ impl RouterService {
         };
         if !transfer_wvara_status {
             return Err(RouterError::TransferFailed);
-        };
-        Ok(())
+        }else {
+            Ok(())
+        }
+        
     }
 
     async fn _wrap_vara(&mut self, vara_amount:u128) -> Result<(),RouterError> {
@@ -296,8 +300,10 @@ impl RouterService {
         };
         if !deposit_status {
             return Err(RouterError::DepositWVARAFailed);
-        };
-        Ok(())
+        }else {
+            Ok(())
+        }
+       
     }
 
     async fn _unwrap_vara(&mut self, vara_amount:U256) -> Result<(),RouterError> {
@@ -309,8 +315,10 @@ impl RouterService {
         };
         if !withdraw_status {
             return Err(RouterError::WithdrawWvaraFailed);
-        };
-        Ok(())
+        }else {
+            Ok(())
+        }
+        
     }
     // public functions
 
@@ -321,8 +329,10 @@ impl RouterService {
         };
         if !transfer_liquidity_status {
             return Err(RouterError::TransferFromLiquidityFailed);
-        };
-        Ok(())
+        } else {
+            Ok(())
+        }
+        
     }
 
     pub async fn create_pair(&mut self, token_a:ActorId, token_b:ActorId) -> Result<(),RouterError>{

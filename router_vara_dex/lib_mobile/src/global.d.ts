@@ -1,0 +1,4 @@
+declare global {;
+  export type RouterError = "pairAlreadyExists" | "transferLiquidityFailed" | "transferFromLiquidityFailed" | "transferFromFailed" | "insufficientFee" | "burnLiquidityFailed" | "insufficientVaraAmount" | "insufficientTokenAmount" | "createPairFailed" | "withdrawWvaraFailed" | "depositWVARAFailed" | "swapFailed" | "mintLiquidityFailed" | "expired" | "pairNotFound" | "identicalAddresses" | "zeroAddress" | "insufficientBAmount" | "insufficientAAmount" | "insufficientLiquidity" | "invalidPath" | "insufficientOutputAmount" | "insufficientInputAmount" | "invalidLiquidityAmount" | "excessiveInputAmount" | "transferFailed";
+
+};

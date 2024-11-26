@@ -136,8 +136,10 @@ impl LPService {
         };
         if !transfer_status {
             return Err(LPError::TransferFailed);
-        }
+        }else {
         Ok(())
+        }
+        
     }
 
     pub async fn mint(&mut self, to:ActorId) ->  Result<U256, LPError>{
