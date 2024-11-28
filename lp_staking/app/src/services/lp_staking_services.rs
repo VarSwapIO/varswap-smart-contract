@@ -35,7 +35,7 @@ impl LpStakingService {
                 reward_token,
                 admin,
                 user_info : HashMap::new(),
-                precision_factor: U256::exp10(18) 
+                precision_factor: U256::exp10(12) 
             }
             )
         }
@@ -139,11 +139,11 @@ impl LpStakingService {
     }
 
     async fn _transfer(&mut self, token:ActorId, to: ActorId, value:U256) -> Result<(),LpStakingError>{
-        let transfer_wvara_res =  self.vft_client.transfer(to, value).send_recv(token).await;
-        let Ok(transfer_wvara_status) = transfer_wvara_res else {
+        let transfer_res =  self.vft_client.transfer(to, value).send_recv(token).await;
+        let Ok(transfer_token_status) = transfer_res else {
             return Err(LpStakingError::TransferTokenFailed);
         };
-        if !transfer_wvara_status {
+        if !transfer_token_status {
             return Err(LpStakingError::TransferTokenFailed);
         }else {
             Ok(())
@@ -202,19 +202,21 @@ impl LpStakingService {
         let Ok(staked_token_supply) = total_supply_res else {
             return Err(LpStakingError::EConnectToken);
         };
-        if staked_token_supply > U256::zero() {
-            state.acc_x_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor) / staked_token_supply;
+        let time_now = block_timestamp()/1000;
+        if staked_token_supply > U256::zero()  {
+            let mul = self.get_mul(time_now, state.last_reward_timestamp, state.end_timestamp);
+            state.acc_x_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor * mul) / staked_token_supply;
         };
-        state.last_reward_timestamp = block_timestamp()/1000;
+        state.last_reward_timestamp = time_now;
 
         //
         if user_info.amount > U256::zero() {
             let pending = (user_info.amount * state.acc_x_per_share) / state.precision_factor - user_info.reward_debt;
             if pending > U256::zero() {
-               let transfer_token_res = self._transfer(state.reward_token, sender, pending).await;
-               if transfer_token_res.is_err(){
-                return Err(transfer_token_res.err().unwrap());
-               }
+               let _ = self._transfer(state.reward_token, sender, pending).await?;
+            //    if transfer_token_res.is_err(){
+            //     return Err(transfer_token_res.err().unwrap());
+            //    }
             };
         }
 
@@ -238,7 +240,8 @@ impl LpStakingService {
     pub async fn withdraw(&mut self, _amount:U256) -> Result<bool, LpStakingError> {
         let sender = msg::source();
         let state = StateLpStaking::get_mut();
-        let user_info = state.user_info.get_mut(&sender).unwrap();
+        let mut empty_user = UserInfo { amount: U256::zero(), reward_debt: U256::zero() };
+        let user_info = state.user_info.get_mut(&sender).unwrap_or(&mut empty_user);
 
         if user_info.amount < _amount {
             return Err(LpStakingError::EAmountWithdrawToHight);
@@ -248,10 +251,12 @@ impl LpStakingService {
         let Ok(staked_token_supply) = total_supply_res else {
              return Err(LpStakingError::EConnectToken);
         };
-        if staked_token_supply > U256::zero() {
-            state.acc_x_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor) / staked_token_supply;
+        let time_now = block_timestamp()/1000;
+        if staked_token_supply > U256::zero()  {
+            let mul = self.get_mul(time_now, state.last_reward_timestamp, state.end_timestamp);
+            state.acc_x_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor * mul) / staked_token_supply;
         };
-        state.last_reward_timestamp = block_timestamp()/1000;
+        state.last_reward_timestamp = time_now;
 
         //
 
@@ -267,10 +272,10 @@ impl LpStakingService {
         };
 
         if pending > U256::zero() {
-            let transfer_token_res = self._transfer(state.reward_token, sender, pending).await;
-               if transfer_token_res.is_err(){
-                return Err(transfer_token_res.err().unwrap());
-               }
+            let _ = self._transfer(state.reward_token, sender, pending).await?;
+            //    if transfer_token_res.is_err(){
+            //     return Err(transfer_token_res.err().unwrap());
+            //    }
         };
 
         user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
@@ -283,13 +288,16 @@ impl LpStakingService {
     //view function
     pub async  fn pending_reward(&self, _user:ActorId) -> U256{
         let state = StateLpStaking::get();
-        let user_info = state.user_info.get(&_user).unwrap();
+        let empty_user = UserInfo { amount: U256::zero(), reward_debt: U256::zero() };
+        let user_info = state.user_info.get(&_user).unwrap_or(&empty_user);
         let total_supply_res = self.lp_client.balance_of(exec::program_id()).recv(state.staked_token).await;
         let Ok(staked_token_supply) = total_supply_res else {
              return U256::zero();
         };
-        if block_timestamp()/ 1000 > state.last_reward_timestamp && staked_token_supply != U256::zero() {
-            let adjusted_token_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor) / staked_token_supply;
+        let time_now = block_timestamp()/ 1000;
+        if time_now > state.last_reward_timestamp && staked_token_supply != U256::zero() {
+            let mul = time_now - state.last_reward_timestamp;
+            let adjusted_token_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor * mul) / staked_token_supply;
             return (user_info.amount * adjusted_token_per_share) / state.precision_factor - user_info.reward_debt;
         }else{
             return (user_info.amount * state.acc_x_per_share) / state.precision_factor - user_info.reward_debt;
@@ -314,12 +322,6 @@ impl LpStakingService {
 
     pub fn pool_info(&self) -> PoolStakingInfo {
         let state = StateLpStaking::get();
-
-        let mut  users_info = Vec::new();
-        for val in state.user_info.values() {
-            users_info.push(*val);
-        }
-
        PoolStakingInfo {
             total_user: state.total_user, 
             total_amount: state.total_amount, 
@@ -330,7 +332,6 @@ impl LpStakingService {
             staked_token:state.staked_token, 
             reward_token:state.reward_token,
             admin:state.admin,
-            users_info,
             precision_factor: state.precision_factor 
         }
     }
@@ -351,6 +352,16 @@ impl LpStakingService {
             return U256::zero();
         };
         balance
+    }
+
+    fn get_mul(&self, current_time:u64, last_time_reward:u64, end_time:u64) -> U256 {
+        if end_time <= last_time_reward {
+            return U256::zero();
+        }else if current_time <= end_time {
+            return U256::from(current_time - last_time_reward);
+        }else {
+            return U256::from(end_time - last_time_reward);
+        }
     }
 
     // pub async fn test_transfer_liquidity(&mut self,_to:ActorId,_amount:U256) -> Result<bool, LpStakingError> {

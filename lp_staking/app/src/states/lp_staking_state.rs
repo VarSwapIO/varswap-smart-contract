@@ -39,7 +39,6 @@ pub struct PoolStakingInfo {
    pub staked_token:ActorId,
    pub reward_token:ActorId,
    pub admin:ActorId,
-   pub users_info:Vec<UserInfo>,
    pub precision_factor : U256
 }
 
