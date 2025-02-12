@@ -116,27 +116,31 @@ impl FactoryService {
             token_b
            };
         let payload_bytes = ["New".encode(), payload.encode()].concat();
-        let create_program_future =
-        ProgramGenerator::create_program_bytes(
+        let create_program_future_res =
+        ProgramGenerator::create_program_bytes_with_gas_for_reply(
                     factory_state.code_id_pair,
                     payload_bytes,
+                    90000000000,
                     0,
+                    0
                 )
                 .map_err(|_| FactoryError::VFTError);
     
-        let Ok((_, address)) = create_program_future else {
+        let Ok(create_program_future) = create_program_future_res else {
                 return Err(FactoryError::VFTError);
         };
 
+        let pair_address = create_program_future.program_id;
+
         //insert new pair_address
-        factory_state.pairs.insert(token_pair.clone(), address.clone());
+        factory_state.pairs.insert(token_pair.clone(), pair_address.clone());
 
         //pair length
         let pair_number = factory_state.pairs.len().try_into().unwrap();
 
-        self.notify_on(FactoryEvent::PairCreated { token_pair, pair_address: address.clone(), pair_number }).unwrap();
+        self.notify_on(FactoryEvent::PairCreated { token_pair, pair_address: pair_address.clone(), pair_number }).unwrap();
         
-        Ok(address)
+        Ok(pair_address)
     }
 
     //view function
