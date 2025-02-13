@@ -10,13 +10,15 @@ pub struct StateLpStaking {
     pub total_amount:U256,
     pub acc_x_per_share: U256,
     pub x_per_second:U256,
+    pub minimum_deposit_amount:U256,
     pub last_reward_timestamp:u64,
     pub end_timestamp:u64,
     pub staked_token:ActorId,
     pub reward_token:ActorId,
     pub admin:ActorId,
     pub user_info:HashMap<ActorId,UserInfo>,
-    pub precision_factor : U256
+    pub precision_factor : U256,
+    pub lock : bool
 }
 #[derive(Encode, Decode, TypeInfo, Debug, Clone, Copy)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -34,6 +36,7 @@ pub struct PoolStakingInfo {
    pub total_amount:U256,
    pub acc_x_per_share: U256,
    pub x_per_second:U256,
+   pub minimum_deposit_amount:U256,
    pub last_reward_timestamp:u64,
    pub end_timestamp:u64,
    pub staked_token:ActorId,
@@ -104,4 +107,6 @@ pub enum LpStakingError {
     EAmountWithdrawToHight,
     TransferLiquidityFailed,
     EPoolEnd,
+    LPStakingStatusIncorrect,
+    ErrorInsufficientBalance
 }

@@ -22,11 +22,12 @@ pub struct LpStakingService {
 
 impl LpStakingService {
 
-    pub fn seed(end_time:u64, staked_token:ActorId, reward_token:ActorId,x_per_second:U256, admin:ActorId){
+    pub fn seed(end_time:u64, staked_token:ActorId, reward_token:ActorId,x_per_second:U256,minimum_deposit_amount:U256, admin:ActorId){
         unsafe {
             LP_STAKING = Some(StateLpStaking { 
                 total_user: 0, 
-                total_amount: U256::from(0), 
+                total_amount: U256::from(0),
+                minimum_deposit_amount,
                 acc_x_per_share: U256::from(0), 
                 x_per_second, 
                 last_reward_timestamp: block_timestamp()/1000, 
@@ -35,7 +36,8 @@ impl LpStakingService {
                 reward_token,
                 admin,
                 user_info : HashMap::new(),
-                precision_factor: U256::exp10(12) 
+                precision_factor: U256::exp10(12),
+                lock : false 
             }
             )
         }
@@ -94,6 +96,17 @@ impl LpStakingService {
         }
 
         state.end_timestamp = new_time_end;
+
+        Ok(true)
+    }
+
+    pub fn update_minimum_deposit_amount(&mut self, new_minimum_amount:U256) -> Result<bool, LpStakingError> {
+        let state = StateLpStaking::get_mut();
+        let sender = msg::source();
+        if sender != state.admin {
+            return Err(LpStakingError::ErrorNotAdmin);
+        }
+        state.minimum_deposit_amount = new_minimum_amount;
 
         Ok(true)
     }
@@ -179,9 +192,28 @@ impl LpStakingService {
     // user function
 
     pub async fn deposit(&mut self, amount:U256) -> Result<bool, LpStakingError> {
+        let state = StateLpStaking::get_mut();
+
+        if state.lock  {
+            return Err(LpStakingError::LPStakingStatusIncorrect);
+        }
+
+        if amount < state.minimum_deposit_amount {
+            return Err(LpStakingError::ErrorInsufficientBalance);
+        }
+        // update_pool
+        let total_supply_res = self.lp_client.balance_of(exec::program_id()).recv(state.staked_token).await;
+        let Ok(staked_token_supply) = total_supply_res else {
+            return Err(LpStakingError::EConnectToken);
+        };
+        let time_now = block_timestamp()/1000;
+        if staked_token_supply > U256::zero()  {
+            let mul = self.get_mul(time_now, state.last_reward_timestamp, state.end_timestamp);
+            state.acc_x_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor * mul) / staked_token_supply;
+        };
+        state.last_reward_timestamp = time_now;
 
         let sender = msg::source();
-        let state = StateLpStaking::get_mut();
         if !state.user_info.contains_key(&sender){
             state.user_info.insert(sender, UserInfo{
                 amount:U256::zero(),
@@ -197,19 +229,9 @@ impl LpStakingService {
 
         let user_info = state.user_info.get_mut(&sender).unwrap();
 
-        // update_pool
-        let total_supply_res = self.lp_client.balance_of(exec::program_id()).recv(state.staked_token).await;
-        let Ok(staked_token_supply) = total_supply_res else {
-            return Err(LpStakingError::EConnectToken);
-        };
-        let time_now = block_timestamp()/1000;
-        if staked_token_supply > U256::zero()  {
-            let mul = self.get_mul(time_now, state.last_reward_timestamp, state.end_timestamp);
-            state.acc_x_per_share = state.acc_x_per_share + (state.x_per_second * state.precision_factor * mul) / staked_token_supply;
-        };
-        state.last_reward_timestamp = time_now;
+        // set lock = true
+        state.lock = true;
 
-        //
         if user_info.amount > U256::zero() {
             let pending = (user_info.amount * state.acc_x_per_share) / state.precision_factor - user_info.reward_debt;
             if pending > U256::zero() {
@@ -231,6 +253,7 @@ impl LpStakingService {
         }
 
         user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
+        state.lock = false;
 
         self.notify_on(LpStakingEvent::Deposit { user: sender, amount, total_lp_staked: user_info.amount, staked_token:state.staked_token }).unwrap();
 
@@ -240,13 +263,12 @@ impl LpStakingService {
     pub async fn withdraw(&mut self, _amount:U256) -> Result<bool, LpStakingError> {
         let sender = msg::source();
         let state = StateLpStaking::get_mut();
-        let mut empty_user = UserInfo { amount: U256::zero(), reward_debt: U256::zero() };
-        let user_info = state.user_info.get_mut(&sender).unwrap_or(&mut empty_user);
 
-        if user_info.amount < _amount {
-            return Err(LpStakingError::EAmountWithdrawToHight);
+        if state.lock  {
+            return Err(LpStakingError::LPStakingStatusIncorrect);
         }
-         // update_pool
+
+        // update_pool
         let total_supply_res = self.lp_client.balance_of(exec::program_id()).recv(state.staked_token).await;
         let Ok(staked_token_supply) = total_supply_res else {
              return Err(LpStakingError::EConnectToken);
@@ -258,7 +280,15 @@ impl LpStakingService {
         };
         state.last_reward_timestamp = time_now;
 
-        //
+        let mut empty_user = UserInfo { amount: U256::zero(), reward_debt: U256::zero() };
+        let user_info = state.user_info.get_mut(&sender).unwrap_or(&mut empty_user);
+
+        if user_info.amount < _amount {
+            return Err(LpStakingError::EAmountWithdrawToHight);
+        }
+        // set lock = true
+
+        state.lock = true;
 
         let pending = (user_info.amount * state.acc_x_per_share) / state.precision_factor - user_info.reward_debt;
         if _amount > U256::zero() { 
@@ -279,6 +309,8 @@ impl LpStakingService {
         };
 
         user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
+        state.lock = false;
+
         self.notify_on(LpStakingEvent::Withdraw { user: sender, amount: _amount, total_lp_staked: user_info.amount, staked_token: state.staked_token }).unwrap();
 
         Ok(true)
@@ -324,7 +356,8 @@ impl LpStakingService {
         let state = StateLpStaking::get();
        PoolStakingInfo {
             total_user: state.total_user, 
-            total_amount: state.total_amount, 
+            total_amount: state.total_amount,
+            minimum_deposit_amount : state.minimum_deposit_amount, 
             acc_x_per_share: state.acc_x_per_share, 
             x_per_second:state.x_per_second, 
             last_reward_timestamp: state.last_reward_timestamp, 

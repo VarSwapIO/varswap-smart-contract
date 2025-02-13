@@ -17,8 +17,8 @@ pub struct LpStakingProgram(());
 #[sails_rs::program]
 impl LpStakingProgram {
     // Program's constructor
-    pub fn new(end_time:u64, staked_token:ActorId, reward_token:ActorId,x_per_second:U256, admin:ActorId) -> Self {
-        services::lp_staking_services::LpStakingService::seed(end_time, staked_token, reward_token, x_per_second, admin);
+    pub fn new(end_time:u64, staked_token:ActorId, reward_token:ActorId,x_per_second:U256, minimum_deposit_amount:U256,admin:ActorId) -> Self {
+        services::lp_staking_services::LpStakingService::seed(end_time, staked_token, reward_token, x_per_second,minimum_deposit_amount, admin);
         Self(())
     }
 
