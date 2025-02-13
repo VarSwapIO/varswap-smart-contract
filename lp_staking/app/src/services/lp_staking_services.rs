@@ -1,5 +1,5 @@
 
-use sails_rs::calls::{Call, Query};
+use sails_rs::calls::{Action, Call, Query};
 use sails_rs::gstd::calls::GStdRemoting;
 use sails_rs::gstd::exec::{self, block_timestamp};
 use sails_rs::{
@@ -139,7 +139,7 @@ impl LpStakingService {
     // private function
 
     async fn _transfer_from(&mut self, token:ActorId, from:ActorId, to:ActorId, value:U256) -> Result<(),LpStakingError>{
-        let send_token_res = self.vft_client.transfer_from( from, to, value).send_recv(token).await;
+        let send_token_res = self.vft_client.transfer_from( from, to, value).with_gas_limit(5_000_000_000).send_recv(token).await;
         let Ok(transfer_token_status) = send_token_res else {
             return Err(LpStakingError::TransferTokenFromFailed);
         };
@@ -152,7 +152,7 @@ impl LpStakingService {
     }
 
     async fn _transfer(&mut self, token:ActorId, to: ActorId, value:U256) -> Result<(),LpStakingError>{
-        let transfer_res =  self.vft_client.transfer(to, value).send_recv(token).await;
+        let transfer_res =  self.vft_client.transfer(to, value).with_gas_limit(5_000_000_000).send_recv(token).await;
         let Ok(transfer_token_status) = transfer_res else {
             return Err(LpStakingError::TransferTokenFailed);
         };
@@ -165,7 +165,7 @@ impl LpStakingService {
     }
 
     async fn transfer_from_liquidity(&mut self, pair:ActorId, from:ActorId, to:ActorId, liquidity:U256) -> Result<(),LpStakingError>{
-        let transfer_liquidity_res = self.lp_client.transfer_from(from, to, liquidity).send_recv(pair).await;
+        let transfer_liquidity_res = self.lp_client.transfer_from(from, to, liquidity).with_gas_limit(5_000_000_000).send_recv(pair).await;
         let Ok(transfer_liquidity_status) = transfer_liquidity_res else {
             return Err(LpStakingError::TransferFromLiquidityFailed);
         };
@@ -177,7 +177,7 @@ impl LpStakingService {
     }
 
     async fn transfer_liquidity(&mut self, pair:ActorId, to:ActorId, liquidity:U256) -> Result<(),LpStakingError>{
-        let transfer_liquidity_res = self.lp_client.transfer(to, liquidity).send_recv(pair).await;
+        let transfer_liquidity_res = self.lp_client.transfer(to, liquidity).with_gas_limit(5_000_000_000).send_recv(pair).await;
         let Ok(transfer_liquidity_status) = transfer_liquidity_res else {
             return Err(LpStakingError::TransferLiquidityFailed);
         };
@@ -235,10 +235,11 @@ impl LpStakingService {
         if user_info.amount > U256::zero() {
             let pending = (user_info.amount * state.acc_x_per_share) / state.precision_factor - user_info.reward_debt;
             if pending > U256::zero() {
-               let _ = self._transfer(state.reward_token, sender, pending).await?;
-            //    if transfer_token_res.is_err(){
-            //     return Err(transfer_token_res.err().unwrap());
-            //    }
+               let transfer_token_res = self._transfer(state.reward_token, sender, pending).await;
+               if transfer_token_res.is_err(){
+                state.lock = false;
+                return Err(transfer_token_res.err().unwrap());
+               }
             };
         }
 
@@ -248,6 +249,7 @@ impl LpStakingService {
                 user_info.amount = user_info.amount + amount;
                 state.total_amount = state.total_amount + amount;
             }else{
+                state.lock = false;
                 return Err(transfer_lp_res.err().unwrap());
             }
         }
@@ -297,15 +299,17 @@ impl LpStakingService {
                 user_info.amount = user_info.amount - _amount;
                 state.total_amount = state.total_amount - _amount;
             }else {
+                state.lock = false;
                 return Err(transfer_lp_res.err().unwrap());
             }
         };
 
         if pending > U256::zero() {
-            let _ = self._transfer(state.reward_token, sender, pending).await?;
-            //    if transfer_token_res.is_err(){
-            //     return Err(transfer_token_res.err().unwrap());
-            //    }
+            let transfer_token_res = self._transfer(state.reward_token, sender, pending).await?;
+               if transfer_token_res.is_err(){
+                state.lock = false;
+                return Err(transfer_token_res.err().unwrap());
+               }
         };
 
         user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;

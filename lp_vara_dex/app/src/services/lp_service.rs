@@ -1,5 +1,5 @@
 use gstd::exec;
-use sails_rs::calls::{Call, Query};
+use sails_rs::calls::{Action, Call, Query};
 use sails_rs::gstd::calls::GStdRemoting;
 use sails_rs::{
     prelude::*,
@@ -33,6 +33,7 @@ impl LPService {
                 decimals,
                 factory,
                 token: token_pair,
+                lock : false,
                 ..Default::default()
             });
         }
@@ -130,7 +131,7 @@ impl LPService {
     }
 
     async fn _safe_transfer(&mut self, token: ActorId, to: ActorId, value: U256) -> Result<(), LPError> {
-        let transfer_res = self.vft_client.transfer(to, value).send_recv(token).await;
+        let transfer_res = self.vft_client.transfer(to, value).with_gas_limit(5_000_000_000).send_recv(token).await;
         let Ok(transfer_status) = transfer_res else {
             return Err(LPError::TransferFailed);
         };
@@ -145,13 +146,22 @@ impl LPService {
     pub async fn mint(&mut self, to:ActorId) ->  Result<U256, LPError>{
         let (reserve0, reserve1, _) = self.get_reserves();
         let state_lp = StateLp::get_mut();
+
+        if state_lp.lock {
+            return Err(LPError::StatusIncorrect);
+        }
+        
+        state_lp.lock = true;
+
         let token_pair = state_lp.token.clone();
         let balance_0_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.0.clone()).await;
         let Ok(balance_0) = balance_0_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance_1_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.1.clone()).await;
         let Ok(balance_1) = balance_1_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let amount_0 = balance_0.checked_sub(reserve0).unwrap();
@@ -169,6 +179,7 @@ impl LPService {
                 amount_1 * total_supply/reserve1)
          };
          if liquidity <= U256::zero() {
+            state_lp.lock = false;
             return Err(LPError::InsufficientLiquidityMinted);
          };
          self._mint(to, liquidity.clone());
@@ -176,6 +187,7 @@ impl LPService {
          if fee_on {
             state_lp.k_last = state_lp.reserve.0.checked_mul(state_lp.reserve.1).unwrap();
          }
+         state_lp.lock = false;
          self.notify_on(LPEvent::Mint { sender: msg::source(), amount: (amount_0,amount_1) }).unwrap();
          Ok(liquidity)
             
@@ -184,13 +196,22 @@ impl LPService {
     pub async fn burn(&mut self, to: ActorId) -> Result<(U256, U256), LPError> {
         let (reserve0, reserve1, _) = self.get_reserves();
         let state_lp = StateLp::get_mut();
+
+        if state_lp.lock {
+            return Err(LPError::StatusIncorrect);
+        }
+        
+        state_lp.lock = true;
+
         let token_pair = state_lp.token.clone();
         let balance0_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.0.clone()).await;
         let Ok(balance0) = balance0_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.1.clone()).await;
         let Ok(balance1) = balance1_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let liquidity = self.vft_service.balance_of(exec::program_id());
@@ -205,20 +226,31 @@ impl LPService {
             return Err(LPError::InsufficientLiquidityBurned);
         }
         self._burn(exec::program_id(), liquidity);
-        self._safe_transfer(token_pair.0.clone(), to, amount0).await?;
-        self._safe_transfer(token_pair.1.clone(), to, amount1).await?;
+        let transfer_a_res =  self._safe_transfer(token_pair.0.clone(), to, amount0).await;
+        if transfer_a_res.is_err() {
+            state_lp.lock = false;
+            return Err(LPError::TransferFailed);
+        }
+        let transfer_b_res =  self._safe_transfer(token_pair.1.clone(), to, amount1).await;
+        if transfer_b_res.is_err() {
+            state_lp.lock = false;
+            return Err(LPError::TransferFailed);
+        }
         let balance0_after_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.0.clone()).await;
         let Ok(balance0_after) = balance0_after_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_after_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.1.clone()).await;
         let Ok(balance1_after) = balance1_after_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let _ = self._update((balance0_after, balance1_after), (reserve0, reserve1));
         if fee_on {
             state_lp.k_last = state_lp.reserve.0.checked_mul(state_lp.reserve.1).unwrap();
         }
+        state_lp.lock = false;
         self.notify_on(LPEvent::Burn {
             sender: msg::source(),
             amount: (amount0, amount1),
@@ -238,33 +270,52 @@ impl LPService {
             return Err(LPError::InsufficientLiquidity);
         }
         let state_lp = StateLp::get();
+
+        if state_lp.lock {
+            return Err(LPError::StatusIncorrect);
+        }
+
         let token_pair = state_lp.token.clone();
 
         if to == token_pair.0 || to == token_pair.1 {
             return Err(LPError::InvalidTo);
         }
+        state_lp.lock = true;
+
         if amount0_out > U256::zero() {
-            self._safe_transfer(token_pair.0, to, amount0_out).await?;
+           let transfer_res =  self._safe_transfer(token_pair.0, to, amount0_out).await;
+           if transfer_res.is_err() {
+                state_lp.lock = false;
+                return Err(LPError::TransferFailed);
+           }
         }
         if amount1_out > U256::zero() {
-            self._safe_transfer(token_pair.1, to, amount1_out).await?;
+            let transfer_res = self._safe_transfer(token_pair.1, to, amount1_out).await;
+            if transfer_res.is_err() {
+                state_lp.lock = false;
+                return Err(LPError::TransferFailed);
+           }
         }
         let balance0_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.0.clone()).await;
         let Ok(balance0) = balance0_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.1.clone()).await;
         let Ok(balance1) = balance1_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let amount0_in = if balance0 > reserve0 - amount0_out { balance0 - (reserve0 - amount0_out) } else { U256::zero() };
         let amount1_in = if balance1 > reserve1 - amount1_out { balance1 - (reserve1 - amount1_out) } else { U256::zero() };
         if amount0_in == U256::zero() && amount1_in == U256::zero() {
+            state_lp.lock = false;
             return Err(LPError::InsufficientInputAmount);
         }
         let balance0_adjusted = balance0 * U256::from(1000) - amount0_in * U256::from(3);
         let balance1_adjusted = balance1 * U256::from(1000) - amount1_in * U256::from(3);
         if balance0_adjusted * balance1_adjusted < reserve0 * reserve1 * U256::from(1000 * 1000) {
+            state_lp.lock = false;
             return Err(LPError::KConstant);
         }
         let _ = self._update((balance0, balance1), (reserve0, reserve1));
@@ -275,25 +326,42 @@ impl LPService {
             amount_out: (amount0_out, amount1_out),
             to,
         }).unwrap();
-
+        state_lp.lock = false;
         Ok(())
     }
 
     pub async fn skim(&mut self, to:ActorId) -> Result<(), LPError> {
         let (reserve0, reserve1, _) = self.get_reserves();
         let state_lp = StateLp::get();
+
+        if state_lp.lock {
+            return Err(LPError::StatusIncorrect);
+        }
+        
+        state_lp.lock = true;
+
         let token_pair = state_lp.token.clone();
         let balance0_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.0.clone()).await;
         let Ok(balance0) = balance0_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.1.clone()).await;
         let Ok(balance1) = balance1_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
-        self._safe_transfer(token_pair.0.clone(), to, balance0 - reserve0).await?;
-        self._safe_transfer(token_pair.1.clone(), to, balance1 - reserve1).await?;
-
+        let transfer_a_res =  self._safe_transfer(token_pair.0.clone(), to, balance0 - reserve0).await;
+        if transfer_a_res.is_err() {
+            state_lp.lock = false;
+            return Err(LPError::TransferFailed);
+        }
+        let transfer_b_res =  self._safe_transfer(token_pair.1.clone(), to, balance1 - reserve1).await;
+        if transfer_b_res.is_err() {
+            state_lp.lock = false;
+            return Err(LPError::TransferFailed);
+        }
+        state_lp.lock = false;
         self.notify_on(LPEvent::Skim { amount_a: (balance0 - reserve0), amount_b: (balance1 - reserve1), to }).unwrap();
         Ok(())
     }
@@ -301,16 +369,26 @@ impl LPService {
     pub async fn sync(&mut self) -> Result<(), LPError> {
         let (reserve0, reserve1, _) = self.get_reserves();
         let state_lp = StateLp::get();
+
+        if state_lp.lock {
+            return Err(LPError::StatusIncorrect);
+        }
+        
+        state_lp.lock = true;
+
         let token_pair = state_lp.token.clone();
         let balance0_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.0.clone()).await;
         let Ok(balance0) = balance0_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self.vft_client.balance_of(exec::program_id()).recv(token_pair.1.clone()).await;
         let Ok(balance1) = balance1_res else {
+            state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let _ = self._update((balance0, balance1), (reserve0, reserve1));
+        state_lp.lock = false;
         self.notify_on(LPEvent::Sync { reserve_a: state_lp.reserve.0, reserve_b: state_lp.reserve.1 }).unwrap();
         Ok(())
     }

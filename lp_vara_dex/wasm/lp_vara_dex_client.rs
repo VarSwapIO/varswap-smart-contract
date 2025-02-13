@@ -485,6 +485,7 @@ pub enum LpError {
     KConstant,
     InvalidTo,
     CanNotConnectToFactory,
+    StatusIncorrect,
 }
 
 pub mod traits {

@@ -120,7 +120,7 @@ impl FactoryService {
         ProgramGenerator::create_program_bytes_with_gas_for_reply(
                     factory_state.code_id_pair,
                     payload_bytes,
-                    90000000000,
+                    9_000_000_000,
                     0,
                     0
                 )
