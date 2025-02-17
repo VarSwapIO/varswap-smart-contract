@@ -4,7 +4,7 @@ use sails_rs::calls::{Action, Call, Query};
 use sails_rs::gstd::calls::GStdRemoting;
 use sails_rs::{gstd::service, prelude::*};
 
-use crate::states::router_state::{RouterError, RouterEvent, RouterState, ROUTER};
+use crate::states::router_state::{self, RouterError, RouterEvent, RouterState, ROUTER};
 use crate::clients::factory_vara_dex_client::FactoryService as FactoryServiceClient;
 use crate::clients::factory_vara_dex_client::traits::FactoryService;
 use crate::clients::extended_new_vft::Vft as VftClient;
@@ -21,7 +21,7 @@ pub struct RouterService {
 impl RouterService {
     pub fn seed(factory_address: ActorId, wvara_address: ActorId, admin_addr:ActorId, fund_addr:ActorId, swap_fee_bps:u128) {
         unsafe {
-            ROUTER = Some(RouterState { factory_address, wvara_address, admin:admin_addr, fund_addr, swap_fee_bps });
+            ROUTER = Some(RouterState { factory_address, wvara_address, admin:admin_addr, fund_addr, swap_fee_bps, lock:false });
         }
     }
 }
@@ -257,7 +257,7 @@ impl RouterService {
                 to
             };
             let pair = self.pair_for(input, output).await?;
-            let swap_res = self.lp_client.swap(amount0_out, amount1_out, to).send_recv(pair).await;
+            let swap_res = self.lp_client.swap(amount0_out, amount1_out, to).with_gas_limit(10_000_000_000).send_recv(pair).await;
             if swap_res.is_err() {
                 return Err(RouterError::SwapFailed);
             }
@@ -266,7 +266,7 @@ impl RouterService {
     }
 
     async fn _transfer_from(&mut self, token:ActorId, from:ActorId, to:ActorId, value:U256) -> Result<(),RouterError>{
-        let send_token_res = self.vft_client.transfer_from( from, to, value).send_recv(token).await;
+        let send_token_res = self.vft_client.transfer_from( from, to, value).with_gas_limit(5_000_000_000).send_recv(token).await;
         let Ok(transfer_token_status) = send_token_res else {
             return Err(RouterError::TransferFromFailed);
         };
@@ -279,7 +279,7 @@ impl RouterService {
     }
 
     async fn _transfer(&mut self, token:ActorId, to: ActorId, value:U256) -> Result<(),RouterError>{
-        let transfer_wvara_res =  self.vft_client.transfer(to, value).send_recv(token).await;
+        let transfer_wvara_res =  self.vft_client.transfer(to, value).with_gas_limit(5_000_000_000).send_recv(token).await;
         let Ok(transfer_wvara_status) = transfer_wvara_res else {
             return Err(RouterError::TransferFailed);
         };
@@ -294,7 +294,7 @@ impl RouterService {
     async fn _wrap_vara(&mut self, vara_amount:u128) -> Result<(),RouterError> {
         let router_state = RouterState::get();
         let wrapped_vara = router_state.wvara_address;
-        let deposit_res = self.vft_client.deposit().with_value(vara_amount).send_recv(wrapped_vara).await;
+        let deposit_res = self.vft_client.deposit().with_gas_limit(5_000_000_000).with_value(vara_amount).send_recv(wrapped_vara).await;
         let Ok(deposit_status) = deposit_res else {
             return Err(RouterError::DepositWVARAFailed);
         };
@@ -309,7 +309,7 @@ impl RouterService {
     async fn _unwrap_vara(&mut self, vara_amount:U256) -> Result<(),RouterError> {
         let router_state = RouterState::get();
         let wrapped_vara = router_state.wvara_address;
-        let withdraw_res = self.vft_client.withdraw(vara_amount).send_recv(wrapped_vara).await;
+        let withdraw_res = self.vft_client.withdraw(vara_amount).with_gas_limit(5_000_000_000).send_recv(wrapped_vara).await;
         let Ok(withdraw_status) = withdraw_res else {
             return Err(RouterError::WithdrawWvaraFailed);
         };
@@ -323,7 +323,7 @@ impl RouterService {
     // public functions
 
     async fn transfer_from_liquidity(&mut self, pair:ActorId, from:ActorId, to:ActorId, liquidity:U256) -> Result<(),RouterError>{
-        let transfer_liquidity_res = self.lp_client.transfer_from(from, to, liquidity).send_recv(pair).await;
+        let transfer_liquidity_res = self.lp_client.transfer_from(from, to, liquidity).with_gas_limit(5_000_000_000).send_recv(pair).await;
         let Ok(transfer_liquidity_status) = transfer_liquidity_res else {
             return Err(RouterError::TransferFromLiquidityFailed);
         };
@@ -336,15 +336,22 @@ impl RouterService {
     }
 
     pub async fn create_pair(&mut self, token_a:ActorId, token_b:ActorId) -> Result<(),RouterError>{
-        let router_state = RouterState::get();
+        let router_state = RouterState::get_mut();
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+        router_state.lock = true;
         if self.pair_for(token_a, token_b).await?.is_zero() {
             let create_fee = msg::value();
-            let create_pair_res = self.factory_client.create_pair(token_a, token_b).with_value(create_fee).send_recv(router_state.factory_address).await;
+            let create_pair_res = self.factory_client.create_pair(token_a, token_b).with_gas_limit(10_000_000_000).with_value(create_fee).send_recv(router_state.factory_address).await;
             let Ok(pair_address) = create_pair_res.unwrap() else {
+                router_state.lock = false;
                 return Err(RouterError::CreatePairFailed);
             };
+            router_state.lock = false;
             self.notify_on(RouterEvent::CreatePair { token_a, token_b, pair_address }).unwrap();
         }else {
+            router_state.lock = false;
             return Err(RouterError::PairAlreadyExists);
         }
         Ok(())
@@ -361,6 +368,13 @@ impl RouterService {
         to: ActorId,
         deadline: u64,
     ) -> Result<(U256, U256, U256), RouterError> {
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
         if deadline < exec::block_timestamp() {
             return Err(RouterError::Expired);
         }
@@ -368,14 +382,26 @@ impl RouterService {
             token_a, token_b, amount_a_desired, amount_b_desired, amount_a_min, amount_b_min,
         ).await?;
 
+        router_state.lock = true;
+
         let pair = self.pair_for(token_a, token_b).await?;
-        let _ = self._transfer_from(token_a, msg::source(), pair, amount_a).await?;
-        let _ = self._transfer_from(token_b, msg::source(), pair, amount_b).await?;
+        let transfer_a_res = self._transfer_from(token_a, msg::source(), pair, amount_a).await;
+        if transfer_a_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferAFailed);
+        }
+        let transfer_b_res = self._transfer_from(token_b, msg::source(), pair, amount_b).await;
+        if transfer_b_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferBFailed);
+        }
         // Mint LP tokens
-        let mint_liquidity_res = self.lp_client.mint(to).send_recv(pair).await;
+        let mint_liquidity_res = self.lp_client.mint(to).with_gas_limit(5_000_000_000).send_recv(pair).await;
         let Ok(liquidity) = mint_liquidity_res.unwrap() else {
+            router_state.lock = false;
             return Err(RouterError::MintLiquidityFailed);
         };
+        router_state.lock = false;
         self.notify_on(RouterEvent::AddLiquidity { token_a, token_b, amount_a, amount_b, to, liquidity: liquidity.clone() }).unwrap();
         Ok((amount_a, amount_b, liquidity))
     }
@@ -389,10 +415,16 @@ impl RouterService {
         to: ActorId,
         deadline: u64,
     ) -> Result<(U256, U256, U256), RouterError> {
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
         if deadline < exec::block_timestamp() {
             return Err(RouterError::Expired);
         }
-        let router_state = RouterState::get();
         let wrapped_vara = router_state.wvara_address;
         let amount_vara_desired = U256::from(msg::value());
         let (amount_token, amount_vara) = self._add_liquidity(
@@ -403,22 +435,40 @@ impl RouterService {
             amount_token_min,
             amount_vara_min,
         ).await?;
+
+        router_state.lock = true;
+
         let pair = self.pair_for(token, wrapped_vara).await?;
         if pair.is_zero() {
+            router_state.lock = false;
             return Err(RouterError::PairNotFound);
         }
-        let _ = self._transfer_from(token, msg::source(), pair, amount_token).await?;
-        let _ = self._wrap_vara(amount_vara.as_u128()).await?;
-        let _ = self._transfer(wrapped_vara, pair, amount_vara).await?;
+        let transfer_token_res = self._transfer_from(token, msg::source(), pair, amount_token).await;
+        if transfer_token_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferAFailed);
+        }
+        let wrap_vara_res = self._wrap_vara(amount_vara.as_u128()).await;
+        if wrap_vara_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::DepositWVARAFailed);
+        }
+        let dep_wvara_res = self._transfer(wrapped_vara, pair, amount_vara).await;
+        if dep_wvara_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::DepositWVARAFailed);
+        }
         // Mint LP tokens
-        let liquidity_res = self.lp_client.mint(to).send_recv(pair).await;
+        let liquidity_res = self.lp_client.mint(to).with_gas_limit(10_000_000_000).send_recv(pair).await;
         let Ok(liquidity) = liquidity_res.unwrap() else {
+            router_state.lock = false;
             return Err(RouterError::MintLiquidityFailed);
         };
         if amount_vara.as_u128() < msg::value() {
             let refund = msg::value() - amount_vara.as_u128();
-            let _ = msg::send_bytes(msg::source(), b"Transfer Vara", refund);
+            let _ = msg::send_bytes_for_reply(msg::source(), b"Transfer Vara", refund,0);
         }
+        router_state.lock = false;
         self.notify_on(RouterEvent::AddLiquidityVARA { token_a: token, amount_a: amount_token, amount_vara, to, liquidity: liquidity.clone() }).unwrap();
 
         Ok((amount_token, amount_vara, liquidity))
@@ -433,20 +483,37 @@ impl RouterService {
         to: ActorId,
         deadline: u64,
     ) -> Result<(U256, U256), RouterError> {
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
         if deadline < exec::block_timestamp() {
             return Err(RouterError::Expired);
         }
 
-        let router_state = RouterState::get();
         let wrapped_vara = router_state.wvara_address;
+
+        router_state.lock = true;
+
         let pair = self.pair_for(token, wrapped_vara).await?;
         if pair.is_zero() {
+            router_state.lock = false;
             return Err(RouterError::PairNotFound);
         }
-        let _ = self.transfer_from_liquidity(pair, msg::source(), pair, liquidity).await?;
+        let transfer_liq_res = self.transfer_from_liquidity(pair, msg::source(), pair, liquidity).await;
+
+        if transfer_liq_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferLiquidityFailed);
+        }
+
         // Burn LP tokens
-        let burn_res = self.lp_client.burn(exec::program_id()).send_recv(pair).await;
+        let burn_res = self.lp_client.burn(exec::program_id()).with_gas_limit(10_000_000_000).send_recv(pair).await;
         let Ok((amount0, amount1)) = burn_res.unwrap() else {
+            router_state.lock = false;
             return Err(RouterError::BurnLiquidityFailed);
         };
         let (token0, _) = self.sort_tokens(token, wrapped_vara)?;
@@ -456,14 +523,25 @@ impl RouterService {
             (amount1, amount0)
         };
         if amount_token < amount_token_min {
+            router_state.lock = false;
             return Err(RouterError::InsufficientTokenAmount);
         }
         if amount_vara < amount_vara_min {
+            router_state.lock = false;
             return Err(RouterError::InsufficientVaraAmount);
         }
-        let _ = self._transfer(token, to, amount_token).await?;
-        let _ = self._unwrap_vara(amount_vara).await?;
-        let _ = msg::send_bytes(to, b"Transfer Vara", amount_vara.as_u128());
+        let transfer_res = self._transfer(token, to, amount_token).await;
+        if transfer_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferAFailed);
+        }
+        let unwrap_res = self._unwrap_vara(amount_vara).await;
+        if unwrap_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::WithdrawWvaraFailed);
+        }
+        let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", amount_vara.as_u128(),0);
+        router_state.lock = false;
         self.notify_on(RouterEvent::RemoveLiquidityVARA { token_a: token, amount_a_received: amount_token, amount_vara_received: amount_vara, to, liquidity }).unwrap();
 
         Ok((amount_token, amount_vara))
@@ -484,13 +562,25 @@ impl RouterService {
         }
 
         let pair = self.pair_for(token_a, token_b).await?;
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
         
         // Transfer LP tokens to pair
-        let _ = self.transfer_from_liquidity(pair, msg::source(), pair, liquidity).await?;
+        router_state.lock = true;
+        let transfer_lp_res = self.transfer_from_liquidity(pair, msg::source(), pair, liquidity).await;
+        if transfer_lp_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferLiquidityFailed);
+        }
 
         // Burn LP tokens
-        let burn_res = self.lp_client.burn(to).send_recv(pair).await;
+        let burn_res = self.lp_client.burn(to).with_gas_limit(10_000_000_000).send_recv(pair).await;
         let Ok((amount0, amount1)) = burn_res.unwrap() else {
+            router_state.lock = false;
             return Err(RouterError::MintLiquidityFailed);
         };
 
@@ -502,12 +592,14 @@ impl RouterService {
         };
 
         if amount_a < amount_a_min {
+            router_state.lock = false;
             return Err(RouterError::InsufficientAAmount);
         }
         if amount_b < amount_b_min {
+            router_state.lock = false;
             return Err(RouterError::InsufficientBAmount);
         }
-
+        router_state.lock = false;
         self.notify_on(RouterEvent::RemoveLiquidity{token_a, token_b, amount_a_received: amount_a, amount_b_received: amount_b, to, liquidity}).unwrap();
         Ok((amount_a, amount_b))
     }
@@ -521,27 +613,44 @@ impl RouterService {
         deadline: u64,
     ) -> Result<Vec<U256>, RouterError> {
 
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+        
         if deadline < exec::block_timestamp() {
             return Err(RouterError::Expired);
         }
+
+        router_state.lock = true;
+
 
         let amounts = self.get_amounts_out(amount_in, path.clone()).await?;
 
         let amount_out = amounts[amounts.len() - 1];
 
         if amount_out < amount_out_min {
+            router_state.lock = false;
             return Err(RouterError::InsufficientOutputAmount);
         }
 
         // Transfer tokens from sender to first pair
         let first_pair = self.pair_for(path[0], path[1]).await?;
         if first_pair.is_zero() {
+            router_state.lock = false;
             return Err(RouterError::PairNotFound);
         }
-        let _ = self._transfer_from(path[0], msg::source(), first_pair, amounts[0]).await?;
+        let transfer_res = self._transfer_from(path[0], msg::source(), first_pair, amounts[0]).await;
+
+        if transfer_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferFailed);
+        }
         // Perform the swap
         self._swap(amounts.clone(), path.clone(), to).await?;
 
+        router_state.lock = false;
         self.notify_on(RouterEvent::SwapExactTokensForTokens{amount_in, amount_out, path: path.clone(), to}).unwrap();
 
         Ok(amounts)
@@ -558,6 +667,13 @@ impl RouterService {
         if deadline < exec::block_timestamp() {
             return Err(RouterError::Expired);
         }
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
         let amounts = self.get_amounts_in(amount_out, path.clone()).await?;
         if amounts[0] > amount_in_max {
             return Err(RouterError::ExcessiveInputAmount);
@@ -566,10 +682,18 @@ impl RouterService {
         if first_pair.is_zero() {
             return Err(RouterError::PairNotFound);
         }
-        let _ = self._transfer_from(path[0], msg::source(), first_pair, amounts[0]).await?;
+
+        router_state.lock = true;
+
+        let transfer_res  = self._transfer_from(path[0], msg::source(), first_pair, amounts[0]).await;
+        if transfer_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferFailed);
+        }
 
         self._swap(amounts.clone(), path.clone(), to).await?;
 
+        router_state.lock = false;
         self.notify_on(RouterEvent::SwapTokensForExactTokens{amount_out, amount_in: amounts[0], path: path.clone(), to}).unwrap();
 
         Ok(amounts)
@@ -585,7 +709,12 @@ impl RouterService {
         if deadline < exec::block_timestamp() {
             return Err(RouterError::Expired);
         }
-        let router_state = RouterState::get();
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
         let wrapped_vara = router_state.wvara_address;
         let vara_amount = msg::value();
         let amounts = self.get_amounts_out(U256::from(vara_amount), path.clone()).await?;
@@ -598,10 +727,25 @@ impl RouterService {
         if first_pair.is_zero() {
             return Err(RouterError::PairNotFound);
         }
+
+        router_state.lock = true;
+
         //deposit vara to wvara
-        let _ = self._wrap_vara(vara_amount).await?;
-        let _ = self._transfer(wrapped_vara, first_pair, U256::from(vara_amount)).await?;
+        let wrap_res = self._wrap_vara(vara_amount).await;
+        if wrap_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::DepositWVARAFailed);
+        }
+
+        let dep_wrap_res = self._transfer(wrapped_vara, first_pair, U256::from(vara_amount)).await;
+        if dep_wrap_res.is_err(){
+            router_state.lock = false;
+            return Err(RouterError::DepositWVARAFailed);
+        }
+
         self._swap(amounts.clone(), path.clone(), to).await?;
+
+        router_state.lock = false;
         self.notify_on(RouterEvent::SwapExactVARAForTokens { amount_in:U256::from(vara_amount), amount_out, path: path.clone(), to  }).unwrap();
         Ok(amounts)
     }
@@ -625,11 +769,30 @@ impl RouterService {
         if first_pair.is_zero() {
             return Err(RouterError::PairNotFound);
         }
-        let _ = self._transfer_from(path[0], msg::source(), first_pair, amounts[0]).await?;
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
+        router_state.lock = true;
+
+        let transfer_res = self._transfer_from(path[0], msg::source(), first_pair, amounts[0]).await;
+        if transfer_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::TransferFailed);
+        }
         self._swap(amounts.clone(), path.clone(), exec::program_id()).await?;
         let amount_vara_out = amounts[amounts.len() - 1];
-        let _ = self._unwrap_vara(amount_vara_out).await?;
-        let _ = msg::send_bytes(to, b"Transfer Vara", amount_vara_out.as_u128());
+        let unwrap_res = self._unwrap_vara(amount_vara_out).await;
+        if unwrap_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::WithdrawWvaraFailed);
+        }
+        let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", amount_vara_out.as_u128(),0);
+
+        router_state.lock = false;
         self.notify_on(RouterEvent::SwapTokensForExactVARA { amount_out: amount_vara_out, amount_in: amounts[0], path: path.clone(), to }).unwrap();
 
         Ok(amounts)
@@ -659,7 +822,7 @@ impl RouterService {
         self._swap(amounts.clone(), path.clone(), exec::program_id()).await?;
 
         let _ = self._unwrap_vara(amount_vara_out).await?;
-        let _ = msg::send_bytes(to, b"Transfer Vara", amount_vara_out.as_u128());
+        let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", amount_vara_out.as_u128(),0);
         self.notify_on(RouterEvent::SwapExactTokensForVARA { amount_in, amount_out: amount_vara_out, path, to }).unwrap();
 
         Ok(amounts)
@@ -685,12 +848,30 @@ impl RouterService {
             return Err(RouterError::ExcessiveInputAmount);
         };
 
-        let _ = self._wrap_vara(amounts[0].as_u128()).await?;
         let first_pair = self.pair_for(wrapped_vara, path[1]).await?;
         if first_pair.is_zero() {
             return Err(RouterError::PairNotFound);
         }
-        let _ = self._transfer(wrapped_vara, first_pair, amounts[0]).await?;
+
+        let router_state = RouterState::get_mut();
+
+        if router_state.lock {
+            return Err(RouterError::IncorrectState);
+        }
+
+        router_state.lock = true;
+
+        let wrap_res = self._wrap_vara(amounts[0].as_u128()).await;
+        if wrap_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::DepositWVARAFailed);
+        }
+        
+        let dep_wrap_res = self._transfer(wrapped_vara, first_pair, amounts[0]).await;
+        if dep_wrap_res.is_err() {
+            router_state.lock = false;
+            return Err(RouterError::DepositWVARAFailed);
+        }
 
         self._swap(amounts.clone(), path.clone(), to).await?;
         let amount_out = amounts[amounts.len()-1];
@@ -698,8 +879,10 @@ impl RouterService {
         // Refund excess VARA
         if vara_amount > amounts[0].as_u128() {
             let refund_amount = vara_amount - amounts[0].as_u128();
-            let _ = msg::send_bytes(to, b"Transfer Vara", refund_amount);
+            let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", refund_amount,0);
         }
+
+        router_state.lock = false;
         self.notify_on(RouterEvent::SwapVARAForExactTokens { amount_out , amount_in: amounts[0], path: path.clone(), to }).unwrap();
 
         Ok(amounts)

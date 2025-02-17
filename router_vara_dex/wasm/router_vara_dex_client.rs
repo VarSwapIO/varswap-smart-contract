@@ -1085,6 +1085,9 @@ pub enum RouterError {
     InvalidLiquidityAmount,
     ExcessiveInputAmount,
     TransferFailed,
+    TransferAFailed,
+    TransferBFailed,
+    IncorrectState,
 }
 
 pub mod traits {

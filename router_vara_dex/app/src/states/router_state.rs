@@ -9,7 +9,8 @@ pub struct RouterState {
   pub wvara_address: ActorId,
   pub admin:ActorId,
   pub fund_addr:ActorId,
-  pub swap_fee_bps:u128
+  pub swap_fee_bps:u128,
+  pub lock:bool
 }
 
 impl RouterState {
@@ -128,4 +129,7 @@ pub enum RouterError {
     InvalidLiquidityAmount,
     ExcessiveInputAmount,
     TransferFailed,
+    TransferAFailed,
+    TransferBFailed,
+    IncorrectState
 }

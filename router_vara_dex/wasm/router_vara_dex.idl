@@ -25,6 +25,9 @@ type RouterError = enum {
   InvalidLiquidityAmount,
   ExcessiveInputAmount,
   TransferFailed,
+  TransferAFailed,
+  TransferBFailed,
+  IncorrectState,
 };
 
 constructor {
