@@ -242,6 +242,7 @@ impl LpStakingService {
                }
             };
         }
+        user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
 
         if amount > U256::zero() {
             let transfer_lp_res = self.transfer_from_liquidity(state.staked_token, sender, exec::program_id(), amount).await;
@@ -253,8 +254,6 @@ impl LpStakingService {
                 return Err(transfer_lp_res.err().unwrap());
             }
         }
-
-        user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
         state.lock = false;
 
         self.notify_on(LpStakingEvent::Deposit { user: sender, amount, total_lp_staked: user_info.amount, staked_token:state.staked_token }).unwrap();
