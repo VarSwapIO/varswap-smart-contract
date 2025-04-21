@@ -25,7 +25,8 @@ pub struct StateLpStaking {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct UserInfo {
     pub amount:U256,
-    pub reward_debt:U256
+    pub reward_debt:U256,
+    pub unclaimed_reward:U256,
 }
 
 #[derive(Encode, Decode, TypeInfo, Debug, Clone)]
