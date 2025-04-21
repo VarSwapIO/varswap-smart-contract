@@ -269,7 +269,7 @@ impl LPService {
         if amount0_out >= reserve0 || amount1_out >= reserve1 {
             return Err(LPError::InsufficientLiquidity);
         }
-        let state_lp = StateLp::get();
+        let state_lp = StateLp::get_mut();
 
         if state_lp.lock {
             return Err(LPError::StatusIncorrect);
@@ -332,7 +332,7 @@ impl LPService {
 
     pub async fn skim(&mut self, to:ActorId) -> Result<(), LPError> {
         let (reserve0, reserve1, _) = self.get_reserves();
-        let state_lp = StateLp::get();
+        let state_lp = StateLp::get_mut();
 
         if state_lp.lock {
             return Err(LPError::StatusIncorrect);
@@ -368,7 +368,7 @@ impl LPService {
 
     pub async fn sync(&mut self) -> Result<(), LPError> {
         let (reserve0, reserve1, _) = self.get_reserves();
-        let state_lp = StateLp::get();
+        let state_lp = StateLp::get_mut();
 
         if state_lp.lock {
             return Err(LPError::StatusIncorrect);
