@@ -312,6 +312,8 @@ impl LpStakingService {
                 //     state.lock = false;
                 //     return Err(transfer_token_res.err().unwrap());
                 // }
+                user_info.reward_debt =
+                    (user_info.amount * state.acc_x_per_share) / state.precision_factor;
             };
         }
         if amount > U256::zero() {
@@ -326,7 +328,7 @@ impl LpStakingService {
                 return Err(transfer_lp_res.err().unwrap());
             }
         }
-        user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
+
         state.lock = false;
 
         self.notify_on(LpStakingEvent::Deposit {
@@ -385,6 +387,8 @@ impl LpStakingService {
 
         if pending > U256::zero() {
             user_info.unclaimed_reward = user_info.unclaimed_reward + pending;
+            user_info.reward_debt =
+                (user_info.amount * state.acc_x_per_share) / state.precision_factor;
         };
 
         if _amount > U256::zero() {
@@ -399,10 +403,7 @@ impl LpStakingService {
                 return Err(transfer_lp_res.err().unwrap());
             }
         };
-
-        user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
         state.lock = false;
-
         self.notify_on(LpStakingEvent::Withdraw {
             user: sender,
             amount: _amount,
@@ -432,16 +433,19 @@ impl LpStakingService {
 
         let pending = (user_info.amount * state.acc_x_per_share) / state.precision_factor
             - user_info.reward_debt;
-        
+
         let total_reward = user_info.unclaimed_reward + pending;
+        user_info.reward_debt = total_reward;
         if total_reward > U256::zero() {
-            let transfer_token_res = self._transfer(state.reward_token, sender, total_reward).await;
+            let transfer_token_res = self
+                ._transfer(state.reward_token, sender, total_reward)
+                .await;
             if transfer_token_res.is_err() {
                 state.lock = false;
                 return Err(transfer_token_res.err().unwrap());
             }
         }
-        user_info.reward_debt = (user_info.amount * state.acc_x_per_share) / state.precision_factor;
+        user_info.unclaimed_reward = U256::zero();
         state.lock = false;
 
         self.notify_on(LpStakingEvent::Withdraw {
