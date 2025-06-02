@@ -7,6 +7,8 @@ pub struct StateFactory {
     pub code_id_pair: CodeId,
     pub fee_to: ActorId,
     pub fee_to_setter: ActorId,
+    pub admin: ActorId,
+    pub router: ActorId,
     pub pairs: HashMap<(ActorId, ActorId), ActorId>,
 }
 
@@ -28,7 +30,9 @@ pub struct InitPair {
     pub token_b:ActorId, 
     pub name:String, 
     pub symbol:String, 
-    pub decimals:u8
+    pub decimals:u8,
+    pub admin:ActorId,
+    pub router:ActorId
 }
 
 
@@ -59,6 +63,8 @@ pub enum FactoryEvent {
         ActorId,
     ),
     Pair(ActorId),
+    RouterSet(ActorId),
+    AdminSet(ActorId),
 }
 
 #[derive(Debug, Clone, Encode, Decode, TypeInfo)]

@@ -92,7 +92,7 @@ impl LpStakingService {
         // if !transfer_status {
         //     return Err(LpStakingError::ETransferTokenFailed);
         // }
-        self.notify_on(LpStakingEvent::TokenRecovery {
+        self.emit_event(LpStakingEvent::TokenRecovery {
             token,
             amount: token_balance,
         })
@@ -331,7 +331,7 @@ impl LpStakingService {
 
         state.lock = false;
 
-        self.notify_on(LpStakingEvent::Deposit {
+        self.emit_event(LpStakingEvent::Deposit {
             user: sender,
             amount,
             total_lp_staked: user_info.amount,
@@ -404,7 +404,7 @@ impl LpStakingService {
             }
         };
         state.lock = false;
-        self.notify_on(LpStakingEvent::Withdraw {
+        self.emit_event(LpStakingEvent::Withdraw {
             user: sender,
             amount: _amount,
             total_lp_staked: user_info.amount,
@@ -448,7 +448,7 @@ impl LpStakingService {
         user_info.unclaimed_reward = U256::zero();
         state.lock = false;
 
-        self.notify_on(LpStakingEvent::Withdraw {
+        self.emit_event(LpStakingEvent::Withdraw {
             user: sender,
             amount: U256::zero(),
             total_lp_staked: user_info.amount,

@@ -12,3 +12,5 @@ gwasm-builder.workspace = true
 sails-idl-gen.workspace = true
 sails-client-gen.workspace = true
 factory_vara_dex = { path = "../app" }
+gstd.workspace = true
+sails-rs.workspace = true

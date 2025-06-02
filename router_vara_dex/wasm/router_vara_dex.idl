@@ -28,6 +28,12 @@ type RouterError = enum {
   TransferAFailed,
   TransferBFailed,
   IncorrectState,
+  Overflow,
+  DivisionError,
+  InsufficientAllowance,
+  NotAdmin,
+  NoPendingFunds,
+  SkimPairLiquidityFailed,
 };
 
 constructor {
@@ -38,10 +44,12 @@ service RouterService {
   AddLiquidity : (token_a: actor_id, token_b: actor_id, amount_a_desired: u256, amount_b_desired: u256, amount_a_min: u256, amount_b_min: u256, to: actor_id, deadline: u64) -> result (struct { u256, u256, u256 }, RouterError);
   AddLiquidityVara : (token: actor_id, amount_token_desired: u256, amount_token_min: u256, amount_vara_min: u256, to: actor_id, deadline: u64) -> result (struct { u256, u256, u256 }, RouterError);
   CreatePair : (token_a: actor_id, token_b: actor_id) -> result (null, RouterError);
+  RecoverPendingLiquidity : (user: actor_id) -> result (null, RouterError);
   RefundToken : (token_addr: actor_id, amount: u256) -> result (bool, RouterError);
   RefundVara : (amount: u128) -> result (bool, RouterError);
   RemoveLiquidity : (token_a: actor_id, token_b: actor_id, liquidity: u256, amount_a_min: u256, amount_b_min: u256, to: actor_id, deadline: u64) -> result (struct { u256, u256 }, RouterError);
   RemoveLiquidityVara : (token: actor_id, liquidity: u256, amount_token_min: u256, amount_vara_min: u256, to: actor_id, deadline: u64) -> result (struct { u256, u256 }, RouterError);
+  SkimPairLiquidity : (pair: actor_id) -> result (null, RouterError);
   SwapExactTokensForTokens : (amount_in: u256, amount_out_min: u256, path: vec actor_id, to: actor_id, deadline: u64) -> result (vec u256, RouterError);
   SwapExactTokensForVara : (amount_in: u256, amount_out_min: u256, path: vec actor_id, to: actor_id, deadline: u64) -> result (vec u256, RouterError);
   SwapExactVaraForTokens : (amount_out_min: u256, path: vec actor_id, to: actor_id, deadline: u64) -> result (vec u256, RouterError);
@@ -63,17 +71,77 @@ service RouterService {
   query SortTokens : (token_a: actor_id, token_b: actor_id) -> result (struct { actor_id, actor_id }, RouterError);
 
   events {
-    CreatePair: struct { token_a: actor_id, token_b: actor_id, pair_address: actor_id };
-    AddLiquidity: struct { token_a: actor_id, token_b: actor_id, amount_a: u256, amount_b: u256, to: actor_id, liquidity: u256 };
-    AddLiquidityVARA: struct { token_a: actor_id, amount_a: u256, amount_vara: u256, to: actor_id, liquidity: u256 };
-    RemoveLiquidity: struct { token_a: actor_id, token_b: actor_id, amount_a_received: u256, amount_b_received: u256, to: actor_id, liquidity: u256 };
-    RemoveLiquidityVARA: struct { token_a: actor_id, amount_a_received: u256, amount_vara_received: u256, to: actor_id, liquidity: u256 };
-    SwapExactTokensForTokens: struct { amount_in: u256, amount_out: u256, path: vec actor_id, to: actor_id };
-    SwapTokensForExactTokens: struct { amount_out: u256, amount_in: u256, path: vec actor_id, to: actor_id };
-    SwapExactVARAForTokens: struct { amount_in: u256, amount_out: u256, path: vec actor_id, to: actor_id };
-    SwapTokensForExactVARA: struct { amount_out: u256, amount_in: u256, path: vec actor_id, to: actor_id };
-    SwapExactTokensForVARA: struct { amount_in: u256, amount_out: u256, path: vec actor_id, to: actor_id };
-    SwapVARAForExactTokens: struct { amount_out: u256, amount_in: u256, path: vec actor_id, to: actor_id };
+    CreatePair: struct {
+      token_a: actor_id,
+      token_b: actor_id,
+      pair_address: actor_id,
+    };
+    AddLiquidity: struct {
+      token_a: actor_id,
+      token_b: actor_id,
+      amount_a: u256,
+      amount_b: u256,
+      to: actor_id,
+      liquidity: u256,
+    };
+    AddLiquidityVARA: struct {
+      token_a: actor_id,
+      amount_a: u256,
+      amount_vara: u256,
+      to: actor_id,
+      liquidity: u256,
+    };
+    RemoveLiquidity: struct {
+      token_a: actor_id,
+      token_b: actor_id,
+      amount_a_received: u256,
+      amount_b_received: u256,
+      to: actor_id,
+      liquidity: u256,
+    };
+    RemoveLiquidityVARA: struct {
+      token_a: actor_id,
+      amount_a_received: u256,
+      amount_vara_received: u256,
+      to: actor_id,
+      liquidity: u256,
+    };
+    SwapExactTokensForTokens: struct {
+      amount_in: u256,
+      amount_out: u256,
+      path: vec actor_id,
+      to: actor_id,
+    };
+    SwapTokensForExactTokens: struct {
+      amount_out: u256,
+      amount_in: u256,
+      path: vec actor_id,
+      to: actor_id,
+    };
+    SwapExactVARAForTokens: struct {
+      amount_in: u256,
+      amount_out: u256,
+      path: vec actor_id,
+      to: actor_id,
+    };
+    SwapTokensForExactVARA: struct {
+      amount_out: u256,
+      amount_in: u256,
+      path: vec actor_id,
+      to: actor_id,
+    };
+    SwapExactTokensForVARA: struct {
+      amount_in: u256,
+      amount_out: u256,
+      path: vec actor_id,
+      to: actor_id,
+    };
+    SwapVARAForExactTokens: struct {
+      amount_out: u256,
+      amount_in: u256,
+      path: vec actor_id,
+      to: actor_id,
+    };
   }
 };
 

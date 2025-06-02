@@ -16,8 +16,8 @@ pub struct FactoryVaraDexProgram;
 #[program]
 impl FactoryVaraDexProgram {
     
-    pub fn new(code_id_pair: CodeId, fee_to: ActorId, fee_to_setter: ActorId) -> Self {
-        FactoryService::seed(code_id_pair, fee_to, fee_to_setter);
+    pub fn new(code_id_pair: CodeId, fee_to: ActorId, fee_to_setter: ActorId, admin: ActorId) -> Self {
+        FactoryService::seed(code_id_pair, fee_to, fee_to_setter, admin);
         Self
     }
     #[route("FactoryService")]

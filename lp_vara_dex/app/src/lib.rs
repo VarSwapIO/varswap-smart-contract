@@ -19,8 +19,8 @@ pub struct LpVaraDexProgram;
 
 #[program]
 impl LpVaraDexProgram {
-    pub fn new(factory:ActorId, token_a:ActorId, token_b:ActorId, name:String, symbol:String, decimals:u8) -> Self {
-        LPService::seed(factory, token_a, token_b, name, symbol, decimals);
+    pub fn new(factory:ActorId, token_a:ActorId, token_b:ActorId, name:String, symbol:String, decimals:u8, admin:ActorId, router:ActorId) -> Self {
+        LPService::seed(factory, token_a, token_b, name, symbol, decimals, admin, router);
         Self
     }
 

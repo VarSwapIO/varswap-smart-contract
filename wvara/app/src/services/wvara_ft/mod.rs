@@ -39,7 +39,7 @@ impl WvaraService {
             funcs::deposit(Storage::balances(), Storage::total_supply(), from, U256::from(value))
         });
         if mutated {
-            let _ = self.notify_on(Event::Deposit { dst: from, wad: U256::from(value)});
+            let _ = self.emit_event(Event::Deposit { dst: from, wad: U256::from(value)});
         }
         mutated
     }
@@ -52,7 +52,7 @@ impl WvaraService {
         if mutated {
             //transfer the value to the caller
             let _ = msg::send_bytes_for_reply(to, b"withdraw", U256::low_u128(&value),0);
-            let _ = self.notify_on(Event::Withdraw { src: to, wad: value });
+            let _ = self.emit_event(Event::Withdraw { src: to, wad: value });
         }
         mutated
     }

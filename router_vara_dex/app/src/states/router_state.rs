@@ -1,16 +1,26 @@
-use sails_rs::{prelude::*};
-
+use gstd::collections::HashMap;
+use sails_rs::prelude::*;
 
 pub static mut ROUTER: Option<RouterState> = None;
 
+#[derive(Debug, Default, Clone)]
+pub struct PendingRefund {
+    pub token_addr: ActorId,
+    pub amount: U256,
+    pub refunded: bool,
+}
+
+pub type PendingLiquidityMap = HashMap<ActorId, Vec<PendingRefund>>;
+
 #[derive(Debug, Default)]
 pub struct RouterState {
-  pub factory_address: ActorId,
-  pub wvara_address: ActorId,
-  pub admin:ActorId,
-  pub fund_addr:ActorId,
-  pub swap_fee_bps:u128,
-  pub lock:bool
+    pub factory_address: ActorId,
+    pub wvara_address: ActorId,
+    pub admin: ActorId,
+    pub fund_addr: ActorId,
+    pub swap_fee_bps: u128,
+    pub lock: bool,
+    pub pending_liquidity: PendingLiquidityMap,
 }
 
 impl RouterState {
@@ -31,72 +41,72 @@ pub enum RouterEvent {
         token_b: ActorId,
         pair_address: ActorId,
     },
-   AddLiquidity {
-    token_a: ActorId,
-    token_b: ActorId,
-    amount_a: U256,
-    amount_b: U256,
-    to: ActorId,
-    liquidity: U256,
-   },
-   AddLiquidityVARA {
-    token_a: ActorId,
-    amount_a: U256,
-    amount_vara: U256,
-    to: ActorId,
-    liquidity: U256,
-   },
-   RemoveLiquidity {
-    token_a: ActorId,
-    token_b: ActorId,
-    amount_a_received: U256,
-    amount_b_received: U256,
-    to: ActorId,
-    liquidity: U256,
-   },
-   RemoveLiquidityVARA {
-    token_a: ActorId,
-    amount_a_received: U256,
-    amount_vara_received: U256,
-    to: ActorId,
-    liquidity: U256,
-   },
-   SwapExactTokensForTokens {
-    amount_in: U256,
-    amount_out: U256,
-    path: Vec<ActorId>,
-    to: ActorId,
-   },
-   SwapTokensForExactTokens {
-    amount_out: U256,
-    amount_in: U256,
-    path: Vec<ActorId>,
-    to: ActorId,
-   },
-   SwapExactVARAForTokens {
-    amount_in: U256,
-    amount_out: U256,
-    path: Vec<ActorId>,
-    to: ActorId,
-   },
-   SwapTokensForExactVARA {
-    amount_out: U256,
-    amount_in: U256,
-    path: Vec<ActorId>,
-    to: ActorId,
-   },
-   SwapExactTokensForVARA {
-    amount_in: U256,
-    amount_out: U256,
-    path: Vec<ActorId>,
-    to: ActorId,
-   },
-   SwapVARAForExactTokens {
-    amount_out: U256,
-    amount_in: U256,
-    path: Vec<ActorId>,
-    to: ActorId,
-   }
+    AddLiquidity {
+        token_a: ActorId,
+        token_b: ActorId,
+        amount_a: U256,
+        amount_b: U256,
+        to: ActorId,
+        liquidity: U256,
+    },
+    AddLiquidityVARA {
+        token_a: ActorId,
+        amount_a: U256,
+        amount_vara: U256,
+        to: ActorId,
+        liquidity: U256,
+    },
+    RemoveLiquidity {
+        token_a: ActorId,
+        token_b: ActorId,
+        amount_a_received: U256,
+        amount_b_received: U256,
+        to: ActorId,
+        liquidity: U256,
+    },
+    RemoveLiquidityVARA {
+        token_a: ActorId,
+        amount_a_received: U256,
+        amount_vara_received: U256,
+        to: ActorId,
+        liquidity: U256,
+    },
+    SwapExactTokensForTokens {
+        amount_in: U256,
+        amount_out: U256,
+        path: Vec<ActorId>,
+        to: ActorId,
+    },
+    SwapTokensForExactTokens {
+        amount_out: U256,
+        amount_in: U256,
+        path: Vec<ActorId>,
+        to: ActorId,
+    },
+    SwapExactVARAForTokens {
+        amount_in: U256,
+        amount_out: U256,
+        path: Vec<ActorId>,
+        to: ActorId,
+    },
+    SwapTokensForExactVARA {
+        amount_out: U256,
+        amount_in: U256,
+        path: Vec<ActorId>,
+        to: ActorId,
+    },
+    SwapExactTokensForVARA {
+        amount_in: U256,
+        amount_out: U256,
+        path: Vec<ActorId>,
+        to: ActorId,
+    },
+    SwapVARAForExactTokens {
+        amount_out: U256,
+        amount_in: U256,
+        path: Vec<ActorId>,
+        to: ActorId,
+    },
 }
 
 #[derive(Debug, Clone, Encode, Decode, TypeInfo)]
@@ -131,5 +141,11 @@ pub enum RouterError {
     TransferFailed,
     TransferAFailed,
     TransferBFailed,
-    IncorrectState
+    IncorrectState,
+    Overflow,
+    DivisionError,
+    InsufficientAllowance,
+    NotAdmin,
+    NoPendingFunds,
+    SkimPairLiquidityFailed
 }

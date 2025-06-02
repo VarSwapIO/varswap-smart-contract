@@ -6,6 +6,8 @@ pub const MINIMUM_LIQUIDITY: u128 = 10u128.pow(3);
 
 #[derive(Debug, Default)]
 pub struct StateLp {
+    pub admin: ActorId,
+    pub router: ActorId,
     pub name:String,
     pub symbol:String,
     pub decimals:u8,
@@ -76,6 +78,8 @@ pub enum LPEvent {
         /// A recipient of skimmed tokens.
         to: ActorId,
     },
+    AdminSet(ActorId),
+    RouterSet(ActorId),
 }
 #[derive(Encode, Decode, TypeInfo, Debug)]
 #[codec(crate = gstd::codec)]
@@ -117,6 +121,7 @@ pub enum LPError {
     KConstant,
     InvalidTo,
     CanNotConnectToFactory,
-    StatusIncorrect
+    StatusIncorrect,
+    Unauthorized
 }
 

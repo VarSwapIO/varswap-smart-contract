@@ -27,10 +27,14 @@ impl<R: Remoting + Clone> traits::LpVaraDexFactory for LpVaraDexFactory<R> {
         name: String,
         symbol: String,
         decimals: u8,
+        admin: ActorId,
+        router: ActorId,
     ) -> impl Activation<Args = R::Args> {
         RemotingAction::<_, lp_vara_dex_factory::io::New>::new(
             self.remoting.clone(),
-            (factory, token_a, token_b, name, symbol, decimals),
+            (
+                factory, token_a, token_b, name, symbol, decimals, admin, router,
+            ),
         )
     }
 }
@@ -50,13 +54,26 @@ pub mod lp_vara_dex_factory {
                 name: String,
                 symbol: String,
                 decimals: u8,
+                admin: ActorId,
+                router: ActorId,
             ) -> Vec<u8> {
-                <New as ActionIo>::encode_call(&(factory, token_a, token_b, name, symbol, decimals))
+                <New as ActionIo>::encode_call(&(
+                    factory, token_a, token_b, name, symbol, decimals, admin, router,
+                ))
             }
         }
         impl ActionIo for New {
             const ROUTE: &'static [u8] = &[12, 78, 101, 119];
-            type Params = (ActorId, ActorId, ActorId, String, String, u8);
+            type Params = (
+                ActorId,
+                ActorId,
+                ActorId,
+                String,
+                String,
+                u8,
+                ActorId,
+                ActorId,
+            );
             type Reply = ();
         }
     }
@@ -79,6 +96,18 @@ impl<R: Remoting + Clone> traits::LpService for LpService<R> {
     }
     fn mint(&mut self, to: ActorId) -> impl Call<Output = Result<U256, LpError>, Args = R::Args> {
         RemotingAction::<_, lp_service::io::Mint>::new(self.remoting.clone(), to)
+    }
+    fn set_admin(
+        &mut self,
+        new_admin: ActorId,
+    ) -> impl Call<Output = Result<(), LpError>, Args = R::Args> {
+        RemotingAction::<_, lp_service::io::SetAdmin>::new(self.remoting.clone(), new_admin)
+    }
+    fn set_router(
+        &mut self,
+        new_router: ActorId,
+    ) -> impl Call<Output = Result<(), LpError>, Args = R::Args> {
+        RemotingAction::<_, lp_service::io::SetRouter>::new(self.remoting.clone(), new_router)
     }
     fn skim(&mut self, to: ActorId) -> impl Call<Output = Result<(), LpError>, Args = R::Args> {
         RemotingAction::<_, lp_service::io::Skim>::new(self.remoting.clone(), to)
@@ -118,8 +147,14 @@ impl<R: Remoting + Clone> traits::LpService for LpService<R> {
             (from, to, value),
         )
     }
+    fn get_admin(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, lp_service::io::GetAdmin>::new(self.remoting.clone(), ())
+    }
     fn get_reserves(&self) -> impl Query<Output = (U256, U256, u64), Args = R::Args> {
         RemotingAction::<_, lp_service::io::GetReserves>::new(self.remoting.clone(), ())
+    }
+    fn get_router(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, lp_service::io::GetRouter>::new(self.remoting.clone(), ())
     }
     fn allowance(
         &self,
@@ -178,6 +213,36 @@ pub mod lp_service {
             ];
             type Params = ActorId;
             type Reply = Result<U256, super::LpError>;
+        }
+        pub struct SetAdmin(());
+        impl SetAdmin {
+            #[allow(dead_code)]
+            pub fn encode_call(new_admin: ActorId) -> Vec<u8> {
+                <SetAdmin as ActionIo>::encode_call(&new_admin)
+            }
+        }
+        impl ActionIo for SetAdmin {
+            const ROUTE: &'static [u8] = &[
+                36, 76, 112, 83, 101, 114, 118, 105, 99, 101, 32, 83, 101, 116, 65, 100, 109, 105,
+                110,
+            ];
+            type Params = ActorId;
+            type Reply = Result<(), super::LpError>;
+        }
+        pub struct SetRouter(());
+        impl SetRouter {
+            #[allow(dead_code)]
+            pub fn encode_call(new_router: ActorId) -> Vec<u8> {
+                <SetRouter as ActionIo>::encode_call(&new_router)
+            }
+        }
+        impl ActionIo for SetRouter {
+            const ROUTE: &'static [u8] = &[
+                36, 76, 112, 83, 101, 114, 118, 105, 99, 101, 36, 83, 101, 116, 82, 111, 117, 116,
+                101, 114,
+            ];
+            type Params = ActorId;
+            type Reply = Result<(), super::LpError>;
         }
         pub struct Skim(());
         impl Skim {
@@ -265,6 +330,21 @@ pub mod lp_service {
             type Params = (ActorId, ActorId, U256);
             type Reply = bool;
         }
+        pub struct GetAdmin(());
+        impl GetAdmin {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetAdmin as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetAdmin {
+            const ROUTE: &'static [u8] = &[
+                36, 76, 112, 83, 101, 114, 118, 105, 99, 101, 32, 71, 101, 116, 65, 100, 109, 105,
+                110,
+            ];
+            type Params = ();
+            type Reply = ActorId;
+        }
         pub struct GetReserves(());
         impl GetReserves {
             #[allow(dead_code)]
@@ -279,6 +359,21 @@ pub mod lp_service {
             ];
             type Params = ();
             type Reply = (U256, U256, u64);
+        }
+        pub struct GetRouter(());
+        impl GetRouter {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetRouter as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetRouter {
+            const ROUTE: &'static [u8] = &[
+                36, 76, 112, 83, 101, 114, 118, 105, 99, 101, 36, 71, 101, 116, 82, 111, 117, 116,
+                101, 114,
+            ];
+            type Params = ();
+            type Reply = ActorId;
         }
         pub struct Allowance(());
         impl Allowance {
@@ -406,15 +501,22 @@ pub mod lp_service {
             },
             /// Should be returned from [`InnerAction::Sync`].
             Sync {
+                /// The current amount of the A token in the contract's reserve.
                 reserve_a: U256,
+                /// The current amount of the B token in the contract's reserve.
                 reserve_b: U256,
             },
             /// Should be returned from [`InnerAction::Skim`].
             Skim {
+                /// A skimmed amount of the A token.
                 amount_a: U256,
+                /// A skimmed amount of the A token.
                 amount_b: U256,
+                /// A recipient of skimmed tokens.
                 to: ActorId,
             },
+            AdminSet(ActorId),
+            RouterSet(ActorId),
             Approval {
                 owner: ActorId,
                 spender: ActorId,
@@ -436,6 +538,8 @@ pub mod lp_service {
                 &[44, 71, 101, 116, 82, 101, 115, 101, 114, 118, 101, 115],
                 &[16, 83, 121, 110, 99],
                 &[16, 83, 107, 105, 109],
+                &[32, 65, 100, 109, 105, 110, 83, 101, 116],
+                &[36, 82, 111, 117, 116, 101, 114, 83, 101, 116],
                 &[32, 65, 112, 112, 114, 111, 118, 97, 108],
                 &[32, 84, 114, 97, 110, 115, 102, 101, 114],
             ];
@@ -446,7 +550,7 @@ pub mod lp_service {
         }
     }
 }
-#[derive(PartialEq, Debug, Encode, Decode, TypeInfo)]
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum LpError {
@@ -486,6 +590,7 @@ pub enum LpError {
     InvalidTo,
     CanNotConnectToFactory,
     StatusIncorrect,
+    Unauthorized,
 }
 
 pub mod traits {
@@ -503,6 +608,8 @@ pub mod traits {
             name: String,
             symbol: String,
             decimals: u8,
+            admin: ActorId,
+            router: ActorId,
         ) -> impl Activation<Args = Self::Args>;
     }
 
@@ -517,6 +624,14 @@ pub mod traits {
             &mut self,
             to: ActorId,
         ) -> impl Call<Output = Result<U256, LpError>, Args = Self::Args>;
+        fn set_admin(
+            &mut self,
+            new_admin: ActorId,
+        ) -> impl Call<Output = Result<(), LpError>, Args = Self::Args>;
+        fn set_router(
+            &mut self,
+            new_router: ActorId,
+        ) -> impl Call<Output = Result<(), LpError>, Args = Self::Args>;
         fn skim(
             &mut self,
             to: ActorId,
@@ -544,7 +659,9 @@ pub mod traits {
             to: ActorId,
             value: U256,
         ) -> impl Call<Output = bool, Args = Self::Args>;
+        fn get_admin(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn get_reserves(&self) -> impl Query<Output = (U256, U256, u64), Args = Self::Args>;
+        fn get_router(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn allowance(
             &self,
             owner: ActorId,
@@ -567,5 +684,5 @@ extern crate std;
 pub mod mockall {
     use super::*;
     use sails_rs::mockall::*;
-    mock! { pub LpService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::LpService for LpService<A> { type Args = A; fn burn (&mut self, to: ActorId,) -> MockCall<A, Result<(U256,U256,), LpError>>;fn mint (&mut self, to: ActorId,) -> MockCall<A, Result<U256, LpError>>;fn skim (&mut self, to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn swap (&mut self, amount0_out: U256,amount1_out: U256,to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn sync (&mut self, ) -> MockCall<A, Result<(), LpError>>;fn approve (&mut self, spender: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer (&mut self, to: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer_from (&mut self, from: ActorId,to: ActorId,value: U256,) -> MockCall<A, bool>;fn get_reserves (& self, ) -> MockQuery<A, (U256,U256,u64,)>;fn allowance (& self, owner: ActorId,spender: ActorId,) -> MockQuery<A, U256>;fn balance_of (& self, account: ActorId,) -> MockQuery<A, U256>;fn decimals (& self, ) -> MockQuery<A, u8>;fn name (& self, ) -> MockQuery<A, String>;fn symbol (& self, ) -> MockQuery<A, String>;fn total_supply (& self, ) -> MockQuery<A, U256>; } }
+    mock! { pub LpService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::LpService for LpService<A> { type Args = A; fn burn (&mut self, to: ActorId,) -> MockCall<A, Result<(U256,U256,), LpError>>;fn mint (&mut self, to: ActorId,) -> MockCall<A, Result<U256, LpError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), LpError>>;fn set_router (&mut self, new_router: ActorId,) -> MockCall<A, Result<(), LpError>>;fn skim (&mut self, to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn swap (&mut self, amount0_out: U256,amount1_out: U256,to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn sync (&mut self, ) -> MockCall<A, Result<(), LpError>>;fn approve (&mut self, spender: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer (&mut self, to: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer_from (&mut self, from: ActorId,to: ActorId,value: U256,) -> MockCall<A, bool>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_reserves (& self, ) -> MockQuery<A, (U256,U256,u64,)>;fn get_router (& self, ) -> MockQuery<A, ActorId>;fn allowance (& self, owner: ActorId,spender: ActorId,) -> MockQuery<A, U256>;fn balance_of (& self, account: ActorId,) -> MockQuery<A, U256>;fn decimals (& self, ) -> MockQuery<A, u8>;fn name (& self, ) -> MockQuery<A, String>;fn symbol (& self, ) -> MockQuery<A, String>;fn total_supply (& self, ) -> MockQuery<A, U256>; } }
 }
