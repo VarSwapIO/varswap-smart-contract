@@ -1,3 +1,9 @@
+type BridgedAsset = struct {
+  name: str,
+  symbol: str,
+  decimals: u8,
+};
+
 type FactoryError = enum {
   Unauthorized,
   UnexpectedFTEvent,
@@ -7,6 +13,7 @@ type FactoryError = enum {
   PairCreationFailed,
   PairNotExist,
   VFTError,
+  BridgedAssetExist,
 };
 
 constructor {
@@ -14,7 +21,10 @@ constructor {
 };
 
 service FactoryService {
+  AddBridgedAsset : (token_address: actor_id, name: str, symbol: str, decimals: u8) -> result (BridgedAsset, FactoryError);
+  AddPair : (token_a: actor_id, token_b: actor_id, pair_address: actor_id) -> result (actor_id, FactoryError);
   CreatePair : (token_a: actor_id, token_b: actor_id) -> result (actor_id, FactoryError);
+  RemoveBridgedAsset : (token_address: actor_id) -> result (null, FactoryError);
   RemovePair : (token_a: actor_id, token_b: actor_id) -> result (null, FactoryError);
   SetAdmin : (new_admin: actor_id) -> result (null, FactoryError);
   SetFeeTo : (new_fee_to: actor_id) -> result (null, FactoryError);
@@ -52,6 +62,15 @@ service FactoryService {
     CodeIdPairUpdated: code_id;
     PairRemoved: struct {
       token_pair: struct { actor_id, actor_id }
+    };
+    BridgedAssetAdded: struct {
+      token_address: actor_id,
+      name: str,
+      symbol: str,
+      decimals: u8,
+    };
+    BridgedAssetRemoved: struct {
+      token_address: actor_id
     };
   }
 };

@@ -67,6 +67,29 @@ impl<R> FactoryService<R> {
 }
 impl<R: Remoting + Clone> traits::FactoryService for FactoryService<R> {
     type Args = R::Args;
+    fn add_bridged_asset(
+        &mut self,
+        token_address: ActorId,
+        name: String,
+        symbol: String,
+        decimals: u8,
+    ) -> impl Call<Output = Result<BridgedAsset, FactoryError>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::AddBridgedAsset>::new(
+            self.remoting.clone(),
+            (token_address, name, symbol, decimals),
+        )
+    }
+    fn add_pair(
+        &mut self,
+        token_a: ActorId,
+        token_b: ActorId,
+        pair_address: ActorId,
+    ) -> impl Call<Output = Result<ActorId, FactoryError>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::AddPair>::new(
+            self.remoting.clone(),
+            (token_a, token_b, pair_address),
+        )
+    }
     fn create_pair(
         &mut self,
         token_a: ActorId,
@@ -75,6 +98,15 @@ impl<R: Remoting + Clone> traits::FactoryService for FactoryService<R> {
         RemotingAction::<_, factory_service::io::CreatePair>::new(
             self.remoting.clone(),
             (token_a, token_b),
+        )
+    }
+    fn remove_bridged_asset(
+        &mut self,
+        token_address: ActorId,
+    ) -> impl Call<Output = Result<(), FactoryError>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::RemoveBridgedAsset>::new(
+            self.remoting.clone(),
+            token_address,
         )
     }
     fn remove_pair(
@@ -165,6 +197,45 @@ pub mod factory_service {
     pub mod io {
         use super::*;
         use sails_rs::calls::ActionIo;
+        pub struct AddBridgedAsset(());
+        impl AddBridgedAsset {
+            #[allow(dead_code)]
+            pub fn encode_call(
+                token_address: ActorId,
+                name: String,
+                symbol: String,
+                decimals: u8,
+            ) -> Vec<u8> {
+                <AddBridgedAsset as ActionIo>::encode_call(&(token_address, name, symbol, decimals))
+            }
+        }
+        impl ActionIo for AddBridgedAsset {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 60, 65, 100,
+                100, 66, 114, 105, 100, 103, 101, 100, 65, 115, 115, 101, 116,
+            ];
+            type Params = (ActorId, String, String, u8);
+            type Reply = Result<super::BridgedAsset, super::FactoryError>;
+        }
+        pub struct AddPair(());
+        impl AddPair {
+            #[allow(dead_code)]
+            pub fn encode_call(
+                token_a: ActorId,
+                token_b: ActorId,
+                pair_address: ActorId,
+            ) -> Vec<u8> {
+                <AddPair as ActionIo>::encode_call(&(token_a, token_b, pair_address))
+            }
+        }
+        impl ActionIo for AddPair {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 28, 65, 100,
+                100, 80, 97, 105, 114,
+            ];
+            type Params = (ActorId, ActorId, ActorId);
+            type Reply = Result<ActorId, super::FactoryError>;
+        }
         pub struct CreatePair(());
         impl CreatePair {
             #[allow(dead_code)]
@@ -179,6 +250,21 @@ pub mod factory_service {
             ];
             type Params = (ActorId, ActorId);
             type Reply = Result<ActorId, super::FactoryError>;
+        }
+        pub struct RemoveBridgedAsset(());
+        impl RemoveBridgedAsset {
+            #[allow(dead_code)]
+            pub fn encode_call(token_address: ActorId) -> Vec<u8> {
+                <RemoveBridgedAsset as ActionIo>::encode_call(&token_address)
+            }
+        }
+        impl ActionIo for RemoveBridgedAsset {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 72, 82, 101,
+                109, 111, 118, 101, 66, 114, 105, 100, 103, 101, 100, 65, 115, 115, 101, 116,
+            ];
+            type Params = ActorId;
+            type Reply = Result<(), super::FactoryError>;
         }
         pub struct RemovePair(());
         impl RemovePair {
@@ -436,6 +522,15 @@ pub mod factory_service {
             PairRemoved {
                 token_pair: (ActorId, ActorId),
             },
+            BridgedAssetAdded {
+                token_address: ActorId,
+                name: String,
+                symbol: String,
+                decimals: u8,
+            },
+            BridgedAssetRemoved {
+                token_address: ActorId,
+            },
         }
         impl EventIo for FactoryServiceEvents {
             const ROUTE: &'static [u8] = &[
@@ -455,6 +550,14 @@ pub mod factory_service {
                     100,
                 ],
                 &[44, 80, 97, 105, 114, 82, 101, 109, 111, 118, 101, 100],
+                &[
+                    68, 66, 114, 105, 100, 103, 101, 100, 65, 115, 115, 101, 116, 65, 100, 100,
+                    101, 100,
+                ],
+                &[
+                    76, 66, 114, 105, 100, 103, 101, 100, 65, 115, 115, 101, 116, 82, 101, 109,
+                    111, 118, 101, 100,
+                ],
             ];
             type Event = Self;
         }
@@ -462,6 +565,14 @@ pub mod factory_service {
             RemotingListener::<_, FactoryServiceEvents>::new(remoting)
         }
     }
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct BridgedAsset {
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u8,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -475,6 +586,7 @@ pub enum FactoryError {
     PairCreationFailed,
     PairNotExist,
     VFTError,
+    BridgedAssetExist,
 }
 
 pub mod traits {
@@ -496,11 +608,28 @@ pub mod traits {
     #[allow(clippy::type_complexity)]
     pub trait FactoryService {
         type Args;
+        fn add_bridged_asset(
+            &mut self,
+            token_address: ActorId,
+            name: String,
+            symbol: String,
+            decimals: u8,
+        ) -> impl Call<Output = Result<BridgedAsset, FactoryError>, Args = Self::Args>;
+        fn add_pair(
+            &mut self,
+            token_a: ActorId,
+            token_b: ActorId,
+            pair_address: ActorId,
+        ) -> impl Call<Output = Result<ActorId, FactoryError>, Args = Self::Args>;
         fn create_pair(
             &mut self,
             token_a: ActorId,
             token_b: ActorId,
         ) -> impl Call<Output = Result<ActorId, FactoryError>, Args = Self::Args>;
+        fn remove_bridged_asset(
+            &mut self,
+            token_address: ActorId,
+        ) -> impl Call<Output = Result<(), FactoryError>, Args = Self::Args>;
         fn remove_pair(
             &mut self,
             token_a: ActorId,
@@ -551,5 +680,5 @@ extern crate std;
 pub mod mockall {
     use super::*;
     use sails_rs::mockall::*;
-    mock! { pub FactoryService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::FactoryService for FactoryService<A> { type Args = A; fn create_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<ActorId, FactoryError>>;fn remove_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to (&mut self, new_fee_to: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to_setter (&mut self, new_fee_setter: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_router (&mut self, router: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn update_code_id_pair (&mut self, new_code_id_pair: CodeId,) -> MockCall<A, Result<(), FactoryError>>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_all_pairs (& self, ) -> MockQuery<A, Vec<(ActorId,ActorId,)>>;fn get_all_pairs_address (& self, ) -> MockQuery<A, Vec<ActorId>>;fn get_code_id_pair (& self, ) -> MockQuery<A, CodeId>;fn get_fee_to (& self, ) -> MockQuery<A, ActorId>;fn get_fee_to_setter (& self, ) -> MockQuery<A, ActorId>;fn get_pair (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, ActorId>;fn get_pair_length (& self, ) -> MockQuery<A, u64>;fn get_router (& self, ) -> MockQuery<A, ActorId>; } }
+    mock! { pub FactoryService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::FactoryService for FactoryService<A> { type Args = A; fn add_bridged_asset (&mut self, token_address: ActorId,name: String,symbol: String,decimals: u8,) -> MockCall<A, Result<BridgedAsset, FactoryError>>;fn add_pair (&mut self, token_a: ActorId,token_b: ActorId,pair_address: ActorId,) -> MockCall<A, Result<ActorId, FactoryError>>;fn create_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<ActorId, FactoryError>>;fn remove_bridged_asset (&mut self, token_address: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn remove_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to (&mut self, new_fee_to: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to_setter (&mut self, new_fee_setter: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_router (&mut self, router: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn update_code_id_pair (&mut self, new_code_id_pair: CodeId,) -> MockCall<A, Result<(), FactoryError>>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_all_pairs (& self, ) -> MockQuery<A, Vec<(ActorId,ActorId,)>>;fn get_all_pairs_address (& self, ) -> MockQuery<A, Vec<ActorId>>;fn get_code_id_pair (& self, ) -> MockQuery<A, CodeId>;fn get_fee_to (& self, ) -> MockQuery<A, ActorId>;fn get_fee_to_setter (& self, ) -> MockQuery<A, ActorId>;fn get_pair (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, ActorId>;fn get_pair_length (& self, ) -> MockQuery<A, u64>;fn get_router (& self, ) -> MockQuery<A, ActorId>; } }
 }

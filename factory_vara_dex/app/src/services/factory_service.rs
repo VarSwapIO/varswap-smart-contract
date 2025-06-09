@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 use gstd::exec;
 use gstd::prog::ProgramGenerator;
 use sails_rs::calls::{Call, Query};
@@ -6,7 +8,7 @@ use sails_rs::{collections::HashMap, gstd::msg, prelude::*};
 
 use crate::clients::extended_new_vft::traits::Vft;
 use crate::clients::extended_new_vft::Vft as VftClient;
-use crate::states::factory_state::{FactoryError, FactoryEvent, InitPair, StateFactory, FACTORY};
+use crate::states::factory_state::{FactoryError, FactoryEvent, InitPair, StateFactory, FACTORY, BridgedAsset};
 
 pub struct FactoryService {
     pub vft_client: VftClient<GStdRemoting>,
@@ -14,15 +16,40 @@ pub struct FactoryService {
 
 impl FactoryService {
     pub fn seed(code_id_pair: CodeId, fee_to: ActorId, fee_to_setter: ActorId, admin: ActorId) {
-        unsafe {
-            FACTORY = Some(StateFactory {
-                code_id_pair,
+        let mut seed_factory = StateFactory {
+            code_id_pair,
                 fee_to,
                 fee_to_setter,
                 admin,
                 router: ActorId::zero(),
                 pairs: HashMap::new(),
-            });
+                bridged_assets: HashMap::new(),
+        };
+        seed_factory.bridged_assets.insert(
+            ActorId::from_str("0xb78e078fa0947e4e3a21f0edf7104f7208119d547cc91dc28dbc0d80cc072c0c").unwrap(), 
+            BridgedAsset {
+            name: String::from_str("Wrapped USDC").unwrap(),
+            symbol: String::from_str("WUSDC").unwrap(),
+            decimals: 18,
+        });
+        seed_factory.bridged_assets.insert(
+            ActorId::from_str("0x2156679a6147013e5217fa3b8210d0ce4986c54aaffcfa70c4a171c7a8b6afd9").unwrap(), 
+            BridgedAsset {
+            name: String::from_str("Wrapped USDT").unwrap(),
+            symbol: String::from_str("WUSDT").unwrap(),
+            decimals: 18,
+        });
+        seed_factory.bridged_assets.insert(
+            ActorId::from_str("0xaa6bc2ad1b660f6e7aaf3cb3418e6f66fe8c78f55400051b1d8bef0483976a42").unwrap(), 
+            BridgedAsset {
+            name: String::from_str("Wrapped Ethereum").unwrap(),
+            symbol: String::from_str("WETH").unwrap(),
+            decimals: 18,
+        });
+
+
+        unsafe {
+                FACTORY = Some(seed_factory);
         }
     }
 }
@@ -40,6 +67,53 @@ impl FactoryService {
         };
         factory_state.fee_to = new_fee_to;
         Ok(())
+    }
+
+    pub fn add_bridged_asset(&mut self, token_address: ActorId, name: String, symbol: String, decimals: u8) -> Result<BridgedAsset, FactoryError> {
+        let caller = msg::source();
+        let factory_state = StateFactory::get_mut();
+        if caller != factory_state.admin {
+            return Err(FactoryError::Unauthorized);
+        }
+        // check exist
+        if factory_state.bridged_assets.contains_key(&token_address) {
+            return Err(FactoryError::BridgedAssetExist);
+        }
+        factory_state.bridged_assets.insert(token_address, BridgedAsset { name: name.clone(), symbol: symbol.clone(), decimals });
+        self.emit_event(FactoryEvent::BridgedAssetAdded { token_address, name: name.clone(), symbol: symbol.clone(), decimals }).unwrap();
+        Ok(BridgedAsset { name, symbol, decimals })
+    }
+
+    pub fn remove_bridged_asset(&mut self, token_address: ActorId) -> Result<(), FactoryError> {
+        let caller = msg::source();
+        let factory_state = StateFactory::get_mut();
+        if caller != factory_state.admin {
+            return Err(FactoryError::Unauthorized);
+        }
+        factory_state.bridged_assets.remove(&token_address);
+        self.emit_event(FactoryEvent::BridgedAssetRemoved { token_address }).unwrap();
+        Ok(())
+    }
+
+    pub fn add_pair(&mut self, token_a: ActorId, token_b: ActorId, pair_address: ActorId) -> Result<ActorId, FactoryError> {
+        let caller = msg::source();
+        let factory_state = StateFactory::get_mut();
+        if caller != factory_state.admin {
+            return Err(FactoryError::Unauthorized);
+        }
+        let token_pair = if token_b > token_a {
+            (token_b, token_a)
+        } else {
+            (token_a, token_b)
+        };
+
+        //check pair exists
+        if factory_state.pairs.contains_key(&token_pair) {
+            return Err(FactoryError::PairExist);
+        }
+
+        factory_state.pairs.insert(token_pair, pair_address);
+        Ok(pair_address)
     }
 
     pub fn set_fee_to_setter(&mut self, new_fee_setter: ActorId) -> Result<(), FactoryError> {
@@ -79,25 +153,63 @@ impl FactoryService {
         if factory_state.pairs.contains_key(&token_pair) {
             return Err(FactoryError::PairExist);
         }
+        // check token a and token b is bridged asset , if not get from  contract
 
-        let token_a_name_res = self.vft_client.name().recv(token_a).await;
-        let Ok(token_a_name) = token_a_name_res else {
-            return Err(FactoryError::VFTError);
-        };
-        let token_b_name_res = self.vft_client.name().recv(token_b).await;
-        let Ok(token_b_name) = token_b_name_res else {
-            return Err(FactoryError::VFTError);
-        };
+        let mut token_a_name = String::new();
+        let mut token_a_symbol = String::new();
+        let mut token_b_name = String::new();
+        let mut token_b_symbol = String::new();
 
-        let token_a_symbol_res = self.vft_client.symbol().recv(token_a).await;
-        let Ok(token_a_symbol) = token_a_symbol_res else {
-            return Err(FactoryError::VFTError);
-        };
+        if factory_state.bridged_assets.contains_key(&token_a) {
+            token_a_name = factory_state.bridged_assets.get(&token_a).unwrap().name.clone();
+            token_a_symbol = factory_state.bridged_assets.get(&token_a).unwrap().symbol.clone();
+        } else {
+            let token_a_name_res = self.vft_client.name().recv(token_a).await;
+            let Ok(token_a_name_get) = token_a_name_res else {
+                return Err(FactoryError::VFTError);
+            }; 
+            token_a_name = token_a_name_get;
+            let token_a_symbol_res = self.vft_client.symbol().recv(token_a).await;
+            let Ok(token_a_symbol_get) = token_a_symbol_res else {
+                return Err(FactoryError::VFTError);
+            };
+            token_a_symbol = token_a_symbol_get;
+        }
 
-        let token_b_symbol_res = self.vft_client.symbol().recv(token_b).await;
-        let Ok(token_b_symbol) = token_b_symbol_res else {
-            return Err(FactoryError::VFTError);
-        };
+        if factory_state.bridged_assets.contains_key(&token_b) {
+            token_b_name = factory_state.bridged_assets.get(&token_b).unwrap().name.clone();
+            token_b_symbol = factory_state.bridged_assets.get(&token_b).unwrap().symbol.clone();
+        } else {
+            let token_b_name_res = self.vft_client.name().recv(token_b).await;
+            let Ok(token_b_name_get) = token_b_name_res else {
+                return Err(FactoryError::VFTError);
+            };
+            token_b_name = token_b_name_get;
+            let token_b_symbol_res = self.vft_client.symbol().recv(token_b).await;
+            let Ok(token_b_symbol_get) = token_b_symbol_res else {
+                return Err(FactoryError::VFTError);
+            };
+            token_b_symbol = token_b_symbol_get;
+        }
+
+        // let token_a_name_res = self.vft_client.name().recv(token_a).await;
+        // let Ok(token_a_name) = token_a_name_res else {
+        //     return Err(FactoryError::VFTError);
+        // };
+        // let token_a_symbol_res = self.vft_client.symbol().recv(token_a).await;
+        // let Ok(token_a_symbol) = token_a_symbol_res else {
+        //     return Err(FactoryError::VFTError);
+        // };
+        
+        // let token_b_name_res = self.vft_client.name().recv(token_b).await;
+        // let Ok(token_b_name) = token_b_name_res else {
+        //     return Err(FactoryError::VFTError);
+        // };
+
+        // let token_b_symbol_res = self.vft_client.symbol().recv(token_b).await;
+        // let Ok(token_b_symbol) = token_b_symbol_res else {
+        //     return Err(FactoryError::VFTError);
+        // };
 
         let lp_name = format!("{}_{}_{}", token_a_name, token_b_name, "LP".to_string());
         let lp_symbol = format!("{}_{}_{}", token_a_symbol, token_b_symbol, "LP".to_string());

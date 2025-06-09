@@ -2,6 +2,16 @@ use sails_rs::{collections::HashMap, prelude::*};
 
 pub static mut FACTORY: Option<StateFactory> = None;
 
+#[derive(Debug, Decode, Encode, TypeInfo)]
+#[codec(crate = gstd::codec)]
+#[scale_info(crate = gstd::scale_info)]
+pub struct BridgedAsset {
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u8,
+}
+
+
 #[derive(Debug, Default)]
 pub struct StateFactory {
     pub code_id_pair: CodeId,
@@ -10,6 +20,7 @@ pub struct StateFactory {
     pub admin: ActorId,
     pub router: ActorId,
     pub pairs: HashMap<(ActorId, ActorId), ActorId>,
+    pub bridged_assets: HashMap<ActorId, BridgedAsset>,
 }
 
 impl StateFactory {
@@ -69,6 +80,15 @@ pub enum FactoryEvent {
     PairRemoved {
         token_pair: (ActorId, ActorId),
     },
+    BridgedAssetAdded {
+        token_address: ActorId,
+        name: String,
+        symbol: String,
+        decimals: u8,
+    },
+    BridgedAssetRemoved {
+        token_address: ActorId,
+    },
 }
 
 #[derive(Debug, Clone, Encode, Decode, TypeInfo)]
@@ -83,4 +103,5 @@ pub enum FactoryError {
     PairCreationFailed,
     PairNotExist,
     VFTError,
+    BridgedAssetExist,
 }
