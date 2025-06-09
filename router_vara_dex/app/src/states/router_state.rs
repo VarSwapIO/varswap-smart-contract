@@ -10,7 +10,15 @@ pub struct PendingRefund {
     pub refunded: bool,
 }
 
+#[derive(Encode, Decode, TypeInfo, Debug, Clone)]
+pub struct LiquidityJoin {
+    pub token_a: ActorId,
+    pub token_b: ActorId,
+    pub pair: ActorId,
+}
+
 pub type PendingLiquidityMap = HashMap<ActorId, Vec<PendingRefund>>;
+pub type LiquidityJoinMap = HashMap<ActorId, Vec<LiquidityJoin>>;
 
 #[derive(Debug, Default)]
 pub struct RouterState {
@@ -21,6 +29,7 @@ pub struct RouterState {
     pub swap_fee_bps: u128,
     pub lock: bool,
     pub pending_liquidity: PendingLiquidityMap,
+    pub liquidity_join: LiquidityJoinMap,
 }
 
 impl RouterState {

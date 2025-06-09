@@ -50,10 +50,12 @@ service LpService {
   Skim : (to: actor_id) -> result (null, LpError);
   Swap : (amount0_out: u256, amount1_out: u256, to: actor_id) -> result (null, LpError);
   Sync : () -> result (null, LpError);
+  Unlock : () -> result (null, LpError);
   Approve : (spender: actor_id, value: u256) -> bool;
   Transfer : (to: actor_id, value: u256) -> bool;
   TransferFrom : (from: actor_id, to: actor_id, value: u256) -> bool;
   query GetAdmin : () -> actor_id;
+  query GetFactory : () -> actor_id;
   query GetReserves : () -> struct { u256, u256, u64 };
   query GetRouter : () -> actor_id;
   query Allowance : (owner: actor_id, spender: actor_id) -> u256;
@@ -108,6 +110,7 @@ service LpService {
     };
     AdminSet: actor_id;
     RouterSet: actor_id;
+    Unlock;
     Approval: struct {
       owner: actor_id,
       spender: actor_id,

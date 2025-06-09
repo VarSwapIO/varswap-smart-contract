@@ -17,7 +17,7 @@ pub struct StateLp {
     pub cumulative_price: (U256, U256),
     pub last_block_ts: u64,
     pub k_last: U256,
-    pub lock: bool
+    // pub lock: bool
     
 }
 
@@ -80,6 +80,7 @@ pub enum LPEvent {
     },
     AdminSet(ActorId),
     RouterSet(ActorId),
+    Unlock,
 }
 #[derive(Encode, Decode, TypeInfo, Debug)]
 #[codec(crate = gstd::codec)]

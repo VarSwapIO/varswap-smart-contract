@@ -169,6 +169,32 @@ impl FactoryService {
         Ok(())
     }
 
+    pub fn update_code_id_pair(&mut self, new_code_id_pair: CodeId) -> Result<(), FactoryError> {
+        let caller = msg::source();
+        let factory_state = StateFactory::get_mut();
+        if caller != factory_state.admin {
+            return Err(FactoryError::Unauthorized);
+        }
+        factory_state.code_id_pair = new_code_id_pair;
+        self.emit_event(FactoryEvent::CodeIdPairUpdated(new_code_id_pair)).unwrap();
+        Ok(())
+    }
+    pub  fn remove_pair(&mut self, token_a: ActorId, token_b: ActorId) -> Result<(), FactoryError> {
+        let caller = msg::source();
+        let factory_state = StateFactory::get_mut();
+        if caller != factory_state.admin {
+            return Err(FactoryError::Unauthorized);
+        }
+        let token_pair = if token_b > token_a {
+            (token_b, token_a)
+        } else {
+            (token_a, token_b)
+        };
+        factory_state.pairs.remove(&token_pair);
+        self.emit_event(FactoryEvent::PairRemoved { token_pair }).unwrap();
+        Ok(())
+    }
+
     //view function
 
     pub fn get_fee_to(&self) -> ActorId {
@@ -197,5 +223,26 @@ impl FactoryService {
     pub fn get_pair_length(&self) -> u64 {
         let state = StateFactory::get();
         state.pairs.len().try_into().unwrap()
+    }
+
+    pub fn get_all_pairs(&self) -> Vec<(ActorId, ActorId)> {
+        let state = StateFactory::get();
+        state.pairs.keys().cloned().collect()
+    }
+    pub fn get_all_pairs_address(&self) -> Vec<ActorId> {
+        let state = StateFactory::get();
+        state.pairs.values().cloned().collect()
+    }
+    pub fn get_code_id_pair(&self) -> CodeId {
+        let state = StateFactory::get();
+        state.code_id_pair
+    }
+    pub fn get_admin(&self) -> ActorId {
+        let state = StateFactory::get();
+        state.admin
+    }
+    pub fn get_router(&self) -> ActorId {
+        let state = StateFactory::get();
+        state.router
     }
 }

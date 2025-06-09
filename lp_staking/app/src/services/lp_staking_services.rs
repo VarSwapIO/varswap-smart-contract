@@ -38,7 +38,7 @@ impl LpStakingService {
                 reward_token,
                 admin,
                 user_info: HashMap::new(),
-                precision_factor: U256::exp10(12),
+                precision_factor: U256::exp10(4),
                 lock: false,
             })
         }
@@ -168,7 +168,7 @@ impl LpStakingService {
         let send_token_res = self
             .vft_client
             .transfer_from(from, to, value)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(token)
             .await;
         let Ok(transfer_token_status) = send_token_res else {
@@ -190,7 +190,7 @@ impl LpStakingService {
         let transfer_res = self
             .vft_client
             .transfer(to, value)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(token)
             .await;
         let Ok(transfer_token_status) = transfer_res else {
@@ -213,7 +213,7 @@ impl LpStakingService {
         let transfer_liquidity_res = self
             .lp_client
             .transfer_from(from, to, liquidity)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(pair)
             .await;
         let Ok(transfer_liquidity_status) = transfer_liquidity_res else {
@@ -235,7 +235,7 @@ impl LpStakingService {
         let transfer_liquidity_res = self
             .lp_client
             .transfer(to, liquidity)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(pair)
             .await;
         let Ok(transfer_liquidity_status) = transfer_liquidity_res else {
@@ -422,6 +422,25 @@ impl LpStakingService {
         if state.lock {
             return Err(LpStakingError::LPStakingStatusIncorrect);
         }
+
+        // Perform async call before modifying the state
+        let total_supply_res = self
+            .lp_client
+            .balance_of(exec::program_id())
+            .recv(state.staked_token)
+            .await;
+        let Ok(staked_token_supply) = total_supply_res else {
+            return Err(LpStakingError::EConnectToken);
+        };
+
+        let time_now = block_timestamp() / 1000;
+        if staked_token_supply > U256::zero() {
+            let mul = self.get_mul(time_now, state.last_reward_timestamp, state.end_timestamp);
+            state.acc_x_per_share = state.acc_x_per_share
+                + (state.x_per_second * state.precision_factor * mul) / staked_token_supply;
+        };
+        state.last_reward_timestamp = time_now;
+
         state.lock = true;
 
         let user_info = state.user_info.get_mut(&sender);
@@ -429,14 +448,17 @@ impl LpStakingService {
             state.lock = false;
             return Err(LpStakingError::ErrorInsufficientBalance);
         }
+
         let user_info = user_info.unwrap();
 
         let pending = (user_info.amount * state.acc_x_per_share) / state.precision_factor
             - user_info.reward_debt;
 
         let total_reward = user_info.unclaimed_reward + pending;
-        user_info.reward_debt = total_reward;
         if total_reward > U256::zero() {
+            user_info.reward_debt =
+                (user_info.amount * state.acc_x_per_share) / state.precision_factor;
+
             let transfer_token_res = self
                 ._transfer(state.reward_token, sender, total_reward)
                 .await;
@@ -559,26 +581,4 @@ impl LpStakingService {
             return U256::from(end_time - last_time_reward);
         }
     }
-
-    // pub async fn test_transfer_liquidity(&mut self,_to:ActorId,_amount:U256) -> Result<bool, LpStakingError> {
-    //     let state = StateLpStaking::get_mut();
-    //     let res = self.transfer_liquidity(state.staked_token, _to, _amount).await;
-
-    //     if res.is_ok(){
-    //         Ok(true)
-    //     }else{
-    //         return Err(res.err().unwrap());
-    //     }
-    // }
-
-    // pub async fn test_transfer_from_liquidity(&mut self,_amount:U256) -> Result<bool, LpStakingError> {
-    //     let state = StateLpStaking::get_mut();
-    //     let sender = msg::source();
-    //     let res = self.transfer_from_liquidity(state.staked_token, sender, exec::program_id(),_amount).await;
-    //     if res.is_ok(){
-    //         Ok(true)
-    //     }else{
-    //         return Err(res.err().unwrap());
-    //     }
-    // }
 }

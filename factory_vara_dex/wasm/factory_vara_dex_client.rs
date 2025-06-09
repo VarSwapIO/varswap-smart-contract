@@ -77,6 +77,16 @@ impl<R: Remoting + Clone> traits::FactoryService for FactoryService<R> {
             (token_a, token_b),
         )
     }
+    fn remove_pair(
+        &mut self,
+        token_a: ActorId,
+        token_b: ActorId,
+    ) -> impl Call<Output = Result<(), FactoryError>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::RemovePair>::new(
+            self.remoting.clone(),
+            (token_a, token_b),
+        )
+    }
     fn set_admin(
         &mut self,
         new_admin: ActorId,
@@ -104,6 +114,27 @@ impl<R: Remoting + Clone> traits::FactoryService for FactoryService<R> {
     ) -> impl Call<Output = Result<(), FactoryError>, Args = R::Args> {
         RemotingAction::<_, factory_service::io::SetRouter>::new(self.remoting.clone(), router)
     }
+    fn update_code_id_pair(
+        &mut self,
+        new_code_id_pair: CodeId,
+    ) -> impl Call<Output = Result<(), FactoryError>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::UpdateCodeIdPair>::new(
+            self.remoting.clone(),
+            new_code_id_pair,
+        )
+    }
+    fn get_admin(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::GetAdmin>::new(self.remoting.clone(), ())
+    }
+    fn get_all_pairs(&self) -> impl Query<Output = Vec<(ActorId, ActorId)>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::GetAllPairs>::new(self.remoting.clone(), ())
+    }
+    fn get_all_pairs_address(&self) -> impl Query<Output = Vec<ActorId>, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::GetAllPairsAddress>::new(self.remoting.clone(), ())
+    }
+    fn get_code_id_pair(&self) -> impl Query<Output = CodeId, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::GetCodeIdPair>::new(self.remoting.clone(), ())
+    }
     fn get_fee_to(&self) -> impl Query<Output = ActorId, Args = R::Args> {
         RemotingAction::<_, factory_service::io::GetFeeTo>::new(self.remoting.clone(), ())
     }
@@ -122,6 +153,9 @@ impl<R: Remoting + Clone> traits::FactoryService for FactoryService<R> {
     }
     fn get_pair_length(&self) -> impl Query<Output = u64, Args = R::Args> {
         RemotingAction::<_, factory_service::io::GetPairLength>::new(self.remoting.clone(), ())
+    }
+    fn get_router(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, factory_service::io::GetRouter>::new(self.remoting.clone(), ())
     }
 }
 
@@ -145,6 +179,21 @@ pub mod factory_service {
             ];
             type Params = (ActorId, ActorId);
             type Reply = Result<ActorId, super::FactoryError>;
+        }
+        pub struct RemovePair(());
+        impl RemovePair {
+            #[allow(dead_code)]
+            pub fn encode_call(token_a: ActorId, token_b: ActorId) -> Vec<u8> {
+                <RemovePair as ActionIo>::encode_call(&(token_a, token_b))
+            }
+        }
+        impl ActionIo for RemovePair {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 40, 82, 101,
+                109, 111, 118, 101, 80, 97, 105, 114,
+            ];
+            type Params = (ActorId, ActorId);
+            type Reply = Result<(), super::FactoryError>;
         }
         pub struct SetAdmin(());
         impl SetAdmin {
@@ -206,6 +255,81 @@ pub mod factory_service {
             type Params = ActorId;
             type Reply = Result<(), super::FactoryError>;
         }
+        pub struct UpdateCodeIdPair(());
+        impl UpdateCodeIdPair {
+            #[allow(dead_code)]
+            pub fn encode_call(new_code_id_pair: CodeId) -> Vec<u8> {
+                <UpdateCodeIdPair as ActionIo>::encode_call(&new_code_id_pair)
+            }
+        }
+        impl ActionIo for UpdateCodeIdPair {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 64, 85, 112,
+                100, 97, 116, 101, 67, 111, 100, 101, 73, 100, 80, 97, 105, 114,
+            ];
+            type Params = CodeId;
+            type Reply = Result<(), super::FactoryError>;
+        }
+        pub struct GetAdmin(());
+        impl GetAdmin {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetAdmin as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetAdmin {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 32, 71, 101,
+                116, 65, 100, 109, 105, 110,
+            ];
+            type Params = ();
+            type Reply = ActorId;
+        }
+        pub struct GetAllPairs(());
+        impl GetAllPairs {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetAllPairs as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetAllPairs {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 44, 71, 101,
+                116, 65, 108, 108, 80, 97, 105, 114, 115,
+            ];
+            type Params = ();
+            type Reply = Vec<(ActorId, ActorId)>;
+        }
+        pub struct GetAllPairsAddress(());
+        impl GetAllPairsAddress {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetAllPairsAddress as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetAllPairsAddress {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 72, 71, 101,
+                116, 65, 108, 108, 80, 97, 105, 114, 115, 65, 100, 100, 114, 101, 115, 115,
+            ];
+            type Params = ();
+            type Reply = Vec<ActorId>;
+        }
+        pub struct GetCodeIdPair(());
+        impl GetCodeIdPair {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetCodeIdPair as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetCodeIdPair {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 52, 71, 101,
+                116, 67, 111, 100, 101, 73, 100, 80, 97, 105, 114,
+            ];
+            type Params = ();
+            type Reply = CodeId;
+        }
         pub struct GetFeeTo(());
         impl GetFeeTo {
             #[allow(dead_code)]
@@ -266,6 +390,21 @@ pub mod factory_service {
             type Params = ();
             type Reply = u64;
         }
+        pub struct GetRouter(());
+        impl GetRouter {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetRouter as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetRouter {
+            const ROUTE: &'static [u8] = &[
+                56, 70, 97, 99, 116, 111, 114, 121, 83, 101, 114, 118, 105, 99, 101, 36, 71, 101,
+                116, 82, 111, 117, 116, 101, 114,
+            ];
+            type Params = ();
+            type Reply = ActorId;
+        }
     }
 
     #[allow(dead_code)]
@@ -293,6 +432,10 @@ pub mod factory_service {
             Pair(ActorId),
             RouterSet(ActorId),
             AdminSet(ActorId),
+            CodeIdPairUpdated(CodeId),
+            PairRemoved {
+                token_pair: (ActorId, ActorId),
+            },
         }
         impl EventIo for FactoryServiceEvents {
             const ROUTE: &'static [u8] = &[
@@ -307,6 +450,11 @@ pub mod factory_service {
                 &[16, 80, 97, 105, 114],
                 &[36, 82, 111, 117, 116, 101, 114, 83, 101, 116],
                 &[32, 65, 100, 109, 105, 110, 83, 101, 116],
+                &[
+                    68, 67, 111, 100, 101, 73, 100, 80, 97, 105, 114, 85, 112, 100, 97, 116, 101,
+                    100,
+                ],
+                &[44, 80, 97, 105, 114, 82, 101, 109, 111, 118, 101, 100],
             ];
             type Event = Self;
         }
@@ -353,6 +501,11 @@ pub mod traits {
             token_a: ActorId,
             token_b: ActorId,
         ) -> impl Call<Output = Result<ActorId, FactoryError>, Args = Self::Args>;
+        fn remove_pair(
+            &mut self,
+            token_a: ActorId,
+            token_b: ActorId,
+        ) -> impl Call<Output = Result<(), FactoryError>, Args = Self::Args>;
         fn set_admin(
             &mut self,
             new_admin: ActorId,
@@ -369,6 +522,14 @@ pub mod traits {
             &mut self,
             router: ActorId,
         ) -> impl Call<Output = Result<(), FactoryError>, Args = Self::Args>;
+        fn update_code_id_pair(
+            &mut self,
+            new_code_id_pair: CodeId,
+        ) -> impl Call<Output = Result<(), FactoryError>, Args = Self::Args>;
+        fn get_admin(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
+        fn get_all_pairs(&self) -> impl Query<Output = Vec<(ActorId, ActorId)>, Args = Self::Args>;
+        fn get_all_pairs_address(&self) -> impl Query<Output = Vec<ActorId>, Args = Self::Args>;
+        fn get_code_id_pair(&self) -> impl Query<Output = CodeId, Args = Self::Args>;
         fn get_fee_to(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn get_fee_to_setter(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn get_pair(
@@ -377,6 +538,7 @@ pub mod traits {
             token_b: ActorId,
         ) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn get_pair_length(&self) -> impl Query<Output = u64, Args = Self::Args>;
+        fn get_router(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
     }
 }
 
@@ -389,5 +551,5 @@ extern crate std;
 pub mod mockall {
     use super::*;
     use sails_rs::mockall::*;
-    mock! { pub FactoryService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::FactoryService for FactoryService<A> { type Args = A; fn create_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<ActorId, FactoryError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to (&mut self, new_fee_to: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to_setter (&mut self, new_fee_setter: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_router (&mut self, router: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn get_fee_to (& self, ) -> MockQuery<A, ActorId>;fn get_fee_to_setter (& self, ) -> MockQuery<A, ActorId>;fn get_pair (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, ActorId>;fn get_pair_length (& self, ) -> MockQuery<A, u64>; } }
+    mock! { pub FactoryService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::FactoryService for FactoryService<A> { type Args = A; fn create_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<ActorId, FactoryError>>;fn remove_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to (&mut self, new_fee_to: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_fee_to_setter (&mut self, new_fee_setter: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn set_router (&mut self, router: ActorId,) -> MockCall<A, Result<(), FactoryError>>;fn update_code_id_pair (&mut self, new_code_id_pair: CodeId,) -> MockCall<A, Result<(), FactoryError>>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_all_pairs (& self, ) -> MockQuery<A, Vec<(ActorId,ActorId,)>>;fn get_all_pairs_address (& self, ) -> MockQuery<A, Vec<ActorId>>;fn get_code_id_pair (& self, ) -> MockQuery<A, CodeId>;fn get_fee_to (& self, ) -> MockQuery<A, ActorId>;fn get_fee_to_setter (& self, ) -> MockQuery<A, ActorId>;fn get_pair (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, ActorId>;fn get_pair_length (& self, ) -> MockQuery<A, u64>;fn get_router (& self, ) -> MockQuery<A, ActorId>; } }
 }

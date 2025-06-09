@@ -65,6 +65,10 @@ pub enum FactoryEvent {
     Pair(ActorId),
     RouterSet(ActorId),
     AdminSet(ActorId),
+    CodeIdPairUpdated(CodeId),
+    PairRemoved {
+        token_pair: (ActorId, ActorId),
+    },
 }
 
 #[derive(Debug, Clone, Encode, Decode, TypeInfo)]

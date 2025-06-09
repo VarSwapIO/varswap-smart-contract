@@ -131,6 +131,9 @@ impl<R: Remoting + Clone> traits::RouterService for RouterService<R> {
             (token_a, token_b),
         )
     }
+    fn lock_router(&mut self) -> impl Call<Output = Result<(), RouterError>, Args = R::Args> {
+        RemotingAction::<_, router_service::io::LockRouter>::new(self.remoting.clone(), ())
+    }
     fn recover_pending_liquidity(
         &mut self,
         user: ActorId,
@@ -282,6 +285,9 @@ impl<R: Remoting + Clone> traits::RouterService for RouterService<R> {
             (amount_out, path, to, deadline),
         )
     }
+    fn unlock_router(&mut self) -> impl Call<Output = Result<(), RouterError>, Args = R::Args> {
+        RemotingAction::<_, router_service::io::UnlockRouter>::new(self.remoting.clone(), ())
+    }
     fn update_fund_addr(
         &mut self,
         new_fund_addr: ActorId,
@@ -327,6 +333,9 @@ impl<R: Remoting + Clone> traits::RouterService for RouterService<R> {
             new_swap_fee_bps,
         )
     }
+    fn get_admin(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetAdmin>::new(self.remoting.clone(), ())
+    }
     fn get_amount_in(
         &self,
         amount_out: U256,
@@ -369,6 +378,21 @@ impl<R: Remoting + Clone> traits::RouterService for RouterService<R> {
             (amount_in, path),
         )
     }
+    fn get_factory(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetFactory>::new(self.remoting.clone(), ())
+    }
+    fn get_fund_addr(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetFundAddr>::new(self.remoting.clone(), ())
+    }
+    fn get_liquidity_join(
+        &self,
+        user: ActorId,
+    ) -> impl Query<Output = Vec<LiquidityJoin>, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetLiquidityJoin>::new(self.remoting.clone(), user)
+    }
+    fn get_lock(&self) -> impl Query<Output = bool, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetLock>::new(self.remoting.clone(), ())
+    }
     fn get_reserves(
         &self,
         token_a: ActorId,
@@ -378,6 +402,12 @@ impl<R: Remoting + Clone> traits::RouterService for RouterService<R> {
             self.remoting.clone(),
             (token_a, token_b),
         )
+    }
+    fn get_swap_fee_bps(&self) -> impl Query<Output = u128, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetSwapFeeBps>::new(self.remoting.clone(), ())
+    }
+    fn get_wvara(&self) -> impl Query<Output = ActorId, Args = R::Args> {
+        RemotingAction::<_, router_service::io::GetWvara>::new(self.remoting.clone(), ())
     }
     fn pair_for(
         &self,
@@ -493,6 +523,21 @@ pub mod router_service {
                 97, 116, 101, 80, 97, 105, 114,
             ];
             type Params = (ActorId, ActorId);
+            type Reply = Result<(), super::RouterError>;
+        }
+        pub struct LockRouter(());
+        impl LockRouter {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <LockRouter as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for LockRouter {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 40, 76, 111, 99,
+                107, 82, 111, 117, 116, 101, 114,
+            ];
+            type Params = ();
             type Reply = Result<(), super::RouterError>;
         }
         pub struct RecoverPendingLiquidity(());
@@ -775,6 +820,21 @@ pub mod router_service {
             type Params = (U256, Vec<ActorId>, ActorId, u64);
             type Reply = Result<Vec<U256>, super::RouterError>;
         }
+        pub struct UnlockRouter(());
+        impl UnlockRouter {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <UnlockRouter as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for UnlockRouter {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 48, 85, 110, 108,
+                111, 99, 107, 82, 111, 117, 116, 101, 114,
+            ];
+            type Params = ();
+            type Reply = Result<(), super::RouterError>;
+        }
         pub struct UpdateFundAddr(());
         impl UpdateFundAddr {
             #[allow(dead_code)]
@@ -850,6 +910,21 @@ pub mod router_service {
             type Params = u128;
             type Reply = Result<bool, super::RouterError>;
         }
+        pub struct GetAdmin(());
+        impl GetAdmin {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetAdmin as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetAdmin {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 32, 71, 101, 116,
+                65, 100, 109, 105, 110,
+            ];
+            type Params = ();
+            type Reply = ActorId;
+        }
         pub struct GetAmountIn(());
         impl GetAmountIn {
             #[allow(dead_code)]
@@ -910,6 +985,66 @@ pub mod router_service {
             type Params = (U256, Vec<ActorId>);
             type Reply = Result<Vec<U256>, super::RouterError>;
         }
+        pub struct GetFactory(());
+        impl GetFactory {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetFactory as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetFactory {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 40, 71, 101, 116,
+                70, 97, 99, 116, 111, 114, 121,
+            ];
+            type Params = ();
+            type Reply = ActorId;
+        }
+        pub struct GetFundAddr(());
+        impl GetFundAddr {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetFundAddr as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetFundAddr {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 44, 71, 101, 116,
+                70, 117, 110, 100, 65, 100, 100, 114,
+            ];
+            type Params = ();
+            type Reply = ActorId;
+        }
+        pub struct GetLiquidityJoin(());
+        impl GetLiquidityJoin {
+            #[allow(dead_code)]
+            pub fn encode_call(user: ActorId) -> Vec<u8> {
+                <GetLiquidityJoin as ActionIo>::encode_call(&user)
+            }
+        }
+        impl ActionIo for GetLiquidityJoin {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 64, 71, 101, 116,
+                76, 105, 113, 117, 105, 100, 105, 116, 121, 74, 111, 105, 110,
+            ];
+            type Params = ActorId;
+            type Reply = Vec<super::LiquidityJoin>;
+        }
+        pub struct GetLock(());
+        impl GetLock {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetLock as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetLock {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 28, 71, 101, 116,
+                76, 111, 99, 107,
+            ];
+            type Params = ();
+            type Reply = bool;
+        }
         pub struct GetReserves(());
         impl GetReserves {
             #[allow(dead_code)]
@@ -924,6 +1059,36 @@ pub mod router_service {
             ];
             type Params = (ActorId, ActorId);
             type Reply = Result<(U256, U256, ActorId), super::RouterError>;
+        }
+        pub struct GetSwapFeeBps(());
+        impl GetSwapFeeBps {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetSwapFeeBps as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetSwapFeeBps {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 52, 71, 101, 116,
+                83, 119, 97, 112, 70, 101, 101, 66, 112, 115,
+            ];
+            type Params = ();
+            type Reply = u128;
+        }
+        pub struct GetWvara(());
+        impl GetWvara {
+            #[allow(dead_code)]
+            pub fn encode_call() -> Vec<u8> {
+                <GetWvara as ActionIo>::encode_call(&())
+            }
+        }
+        impl ActionIo for GetWvara {
+            const ROUTE: &'static [u8] = &[
+                52, 82, 111, 117, 116, 101, 114, 83, 101, 114, 118, 105, 99, 101, 32, 71, 101, 116,
+                87, 118, 97, 114, 97,
+            ];
+            type Params = ();
+            type Reply = ActorId;
         }
         pub struct PairFor(());
         impl PairFor {
@@ -1141,6 +1306,14 @@ pub enum RouterError {
     NoPendingFunds,
     SkimPairLiquidityFailed,
 }
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct LiquidityJoin {
+    pub token_a: ActorId,
+    pub token_b: ActorId,
+    pub pair: ActorId,
+}
 
 pub mod traits {
     use super::*;
@@ -1187,6 +1360,8 @@ pub mod traits {
             token_a: ActorId,
             token_b: ActorId,
         ) -> impl Call<Output = Result<(), RouterError>, Args = Self::Args>;
+        fn lock_router(&mut self)
+            -> impl Call<Output = Result<(), RouterError>, Args = Self::Args>;
         fn recover_pending_liquidity(
             &mut self,
             user: ActorId,
@@ -1269,6 +1444,9 @@ pub mod traits {
             to: ActorId,
             deadline: u64,
         ) -> impl Call<Output = Result<Vec<U256>, RouterError>, Args = Self::Args>;
+        fn unlock_router(
+            &mut self,
+        ) -> impl Call<Output = Result<(), RouterError>, Args = Self::Args>;
         fn update_fund_addr(
             &mut self,
             new_fund_addr: ActorId,
@@ -1289,6 +1467,7 @@ pub mod traits {
             &mut self,
             new_swap_fee_bps: u128,
         ) -> impl Call<Output = Result<bool, RouterError>, Args = Self::Args>;
+        fn get_admin(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn get_amount_in(
             &self,
             amount_out: U256,
@@ -1311,11 +1490,20 @@ pub mod traits {
             amount_in: U256,
             path: Vec<ActorId>,
         ) -> impl Query<Output = Result<Vec<U256>, RouterError>, Args = Self::Args>;
+        fn get_factory(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
+        fn get_fund_addr(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
+        fn get_liquidity_join(
+            &self,
+            user: ActorId,
+        ) -> impl Query<Output = Vec<LiquidityJoin>, Args = Self::Args>;
+        fn get_lock(&self) -> impl Query<Output = bool, Args = Self::Args>;
         fn get_reserves(
             &self,
             token_a: ActorId,
             token_b: ActorId,
         ) -> impl Query<Output = Result<(U256, U256, ActorId), RouterError>, Args = Self::Args>;
+        fn get_swap_fee_bps(&self) -> impl Query<Output = u128, Args = Self::Args>;
+        fn get_wvara(&self) -> impl Query<Output = ActorId, Args = Self::Args>;
         fn pair_for(
             &self,
             token_a: ActorId,
@@ -1344,5 +1532,5 @@ extern crate std;
 pub mod mockall {
     use super::*;
     use sails_rs::mockall::*;
-    mock! { pub RouterService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::RouterService for RouterService<A> { type Args = A; fn add_liquidity (&mut self, token_a: ActorId,token_b: ActorId,amount_a_desired: U256,amount_b_desired: U256,amount_a_min: U256,amount_b_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,U256,), RouterError>>;fn add_liquidity_vara (&mut self, token: ActorId,amount_token_desired: U256,amount_token_min: U256,amount_vara_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,U256,), RouterError>>;fn create_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<(), RouterError>>;fn recover_pending_liquidity (&mut self, user: ActorId,) -> MockCall<A, Result<(), RouterError>>;fn refund_token (&mut self, token_addr: ActorId,amount: U256,) -> MockCall<A, Result<bool, RouterError>>;fn refund_vara (&mut self, amount: u128,) -> MockCall<A, Result<bool, RouterError>>;fn remove_liquidity (&mut self, token_a: ActorId,token_b: ActorId,liquidity: U256,amount_a_min: U256,amount_b_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,), RouterError>>;fn remove_liquidity_vara (&mut self, token: ActorId,liquidity: U256,amount_token_min: U256,amount_vara_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,), RouterError>>;fn skim_pair_liquidity (&mut self, pair: ActorId,) -> MockCall<A, Result<(), RouterError>>;fn swap_exact_tokens_for_tokens (&mut self, amount_in: U256,amount_out_min: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_exact_tokens_for_vara (&mut self, amount_in: U256,amount_out_min: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_exact_vara_for_tokens (&mut self, amount_out_min: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_tokens_for_exact_tokens (&mut self, amount_out: U256,amount_in_max: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_tokens_for_exact_vara (&mut self, amount_out: U256,amount_in_max: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_vara_for_exact_tokens (&mut self, amount_out: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn update_fund_addr (&mut self, new_fund_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_new_admin (&mut self, new_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_new_factorty (&mut self, new_factory_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_new_wrapvara (&mut self, new_wvara_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_swap_fee_bps (&mut self, new_swap_fee_bps: u128,) -> MockCall<A, Result<bool, RouterError>>;fn get_amount_in (& self, amount_out: U256,reserve_in: U256,reserve_out: U256,) -> MockQuery<A, Result<U256, RouterError>>;fn get_amount_out (& self, amount_in: U256,reserve_in: U256,reserve_out: U256,) -> MockQuery<A, Result<U256, RouterError>>;fn get_amounts_in (& self, amount_out: U256,path: Vec<ActorId>,) -> MockQuery<A, Result<Vec<U256>, RouterError>>;fn get_amounts_out (& self, amount_in: U256,path: Vec<ActorId>,) -> MockQuery<A, Result<Vec<U256>, RouterError>>;fn get_reserves (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, Result<(U256,U256,ActorId,), RouterError>>;fn pair_for (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, Result<ActorId, RouterError>>;fn quote (& self, amount_a: U256,reserve_a: U256,reserve_b: U256,) -> MockQuery<A, Result<U256, RouterError>>;fn sort_tokens (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, Result<(ActorId,ActorId,), RouterError>>; } }
+    mock! { pub RouterService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::RouterService for RouterService<A> { type Args = A; fn add_liquidity (&mut self, token_a: ActorId,token_b: ActorId,amount_a_desired: U256,amount_b_desired: U256,amount_a_min: U256,amount_b_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,U256,), RouterError>>;fn add_liquidity_vara (&mut self, token: ActorId,amount_token_desired: U256,amount_token_min: U256,amount_vara_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,U256,), RouterError>>;fn create_pair (&mut self, token_a: ActorId,token_b: ActorId,) -> MockCall<A, Result<(), RouterError>>;fn lock_router (&mut self, ) -> MockCall<A, Result<(), RouterError>>;fn recover_pending_liquidity (&mut self, user: ActorId,) -> MockCall<A, Result<(), RouterError>>;fn refund_token (&mut self, token_addr: ActorId,amount: U256,) -> MockCall<A, Result<bool, RouterError>>;fn refund_vara (&mut self, amount: u128,) -> MockCall<A, Result<bool, RouterError>>;fn remove_liquidity (&mut self, token_a: ActorId,token_b: ActorId,liquidity: U256,amount_a_min: U256,amount_b_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,), RouterError>>;fn remove_liquidity_vara (&mut self, token: ActorId,liquidity: U256,amount_token_min: U256,amount_vara_min: U256,to: ActorId,deadline: u64,) -> MockCall<A, Result<(U256,U256,), RouterError>>;fn skim_pair_liquidity (&mut self, pair: ActorId,) -> MockCall<A, Result<(), RouterError>>;fn swap_exact_tokens_for_tokens (&mut self, amount_in: U256,amount_out_min: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_exact_tokens_for_vara (&mut self, amount_in: U256,amount_out_min: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_exact_vara_for_tokens (&mut self, amount_out_min: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_tokens_for_exact_tokens (&mut self, amount_out: U256,amount_in_max: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_tokens_for_exact_vara (&mut self, amount_out: U256,amount_in_max: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn swap_vara_for_exact_tokens (&mut self, amount_out: U256,path: Vec<ActorId>,to: ActorId,deadline: u64,) -> MockCall<A, Result<Vec<U256>, RouterError>>;fn unlock_router (&mut self, ) -> MockCall<A, Result<(), RouterError>>;fn update_fund_addr (&mut self, new_fund_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_new_admin (&mut self, new_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_new_factorty (&mut self, new_factory_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_new_wrapvara (&mut self, new_wvara_addr: ActorId,) -> MockCall<A, Result<bool, RouterError>>;fn update_swap_fee_bps (&mut self, new_swap_fee_bps: u128,) -> MockCall<A, Result<bool, RouterError>>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_amount_in (& self, amount_out: U256,reserve_in: U256,reserve_out: U256,) -> MockQuery<A, Result<U256, RouterError>>;fn get_amount_out (& self, amount_in: U256,reserve_in: U256,reserve_out: U256,) -> MockQuery<A, Result<U256, RouterError>>;fn get_amounts_in (& self, amount_out: U256,path: Vec<ActorId>,) -> MockQuery<A, Result<Vec<U256>, RouterError>>;fn get_amounts_out (& self, amount_in: U256,path: Vec<ActorId>,) -> MockQuery<A, Result<Vec<U256>, RouterError>>;fn get_factory (& self, ) -> MockQuery<A, ActorId>;fn get_fund_addr (& self, ) -> MockQuery<A, ActorId>;fn get_liquidity_join (& self, user: ActorId,) -> MockQuery<A, Vec<LiquidityJoin>>;fn get_lock (& self, ) -> MockQuery<A, bool>;fn get_reserves (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, Result<(U256,U256,ActorId,), RouterError>>;fn get_swap_fee_bps (& self, ) -> MockQuery<A, u128>;fn get_wvara (& self, ) -> MockQuery<A, ActorId>;fn pair_for (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, Result<ActorId, RouterError>>;fn quote (& self, amount_a: U256,reserve_a: U256,reserve_b: U256,) -> MockQuery<A, Result<U256, RouterError>>;fn sort_tokens (& self, token_a: ActorId,token_b: ActorId,) -> MockQuery<A, Result<(ActorId,ActorId,), RouterError>>; } }
 }

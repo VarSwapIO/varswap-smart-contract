@@ -40,7 +40,7 @@ impl LPService {
                 decimals,
                 factory,
                 token: token_pair,
-                lock: false,
+                // lock: false,
                 ..Default::default()
             });
         }
@@ -170,7 +170,7 @@ impl LPService {
         let transfer_res = self
             .vft_client
             .transfer(to, value)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(token)
             .await;
         let Ok(transfer_status) = transfer_res else {
@@ -187,11 +187,11 @@ impl LPService {
         let (reserve0, reserve1, _) = self.get_reserves();
         let state_lp = StateLp::get_mut();
 
-        if state_lp.lock {
-            return Err(LPError::StatusIncorrect);
-        }
+        // if state_lp.lock {
+        //     return Err(LPError::StatusIncorrect);
+        // }
 
-        state_lp.lock = true;
+        // state_lp.lock = true;
 
         let token_pair = state_lp.token.clone();
         let balance_0_res = self
@@ -200,7 +200,7 @@ impl LPService {
             .recv(token_pair.0.clone())
             .await;
         let Ok(balance_0) = balance_0_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance_1_res = self
@@ -209,7 +209,7 @@ impl LPService {
             .recv(token_pair.1.clone())
             .await;
         let Ok(balance_1) = balance_1_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let amount_0 = balance_0.checked_sub(reserve0).unwrap();
@@ -227,8 +227,8 @@ impl LPService {
             self._mint(ActorId::zero(), U256::from(MINIMUM_LIQUIDITY));
             mint_amount
         } else {
-            // amount_0 * total_supply / reserve0,
-            // amount_1 * total_supply / reserve1,
+            // let amount_0_min = amount_0 * total_supply / reserve0;
+            // let amount_1_min = amount_1 * total_supply / reserve1;
             let amount_0_min = amount_0
                 .checked_mul(total_supply)
                 .and_then(|v| v.checked_div(reserve0))
@@ -240,7 +240,7 @@ impl LPService {
             gstd::cmp::min(amount_0_min, amount_1_min)
         };
         if liquidity <= U256::zero() {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::InsufficientLiquidityMinted);
         };
         self._mint(to, liquidity.clone());
@@ -248,7 +248,7 @@ impl LPService {
         if fee_on {
             state_lp.k_last = state_lp.reserve.0.checked_mul(state_lp.reserve.1).unwrap();
         }
-        state_lp.lock = false;
+        // state_lp.lock = false;
         self.emit_event(LPEvent::Mint {
             sender: msg::source(),
             amount: (amount_0, amount_1),
@@ -261,11 +261,11 @@ impl LPService {
         let (reserve0, reserve1, _) = self.get_reserves();
         let state_lp = StateLp::get_mut();
 
-        if state_lp.lock {
-            return Err(LPError::StatusIncorrect);
-        }
+        // if state_lp.lock {
+        //     return Err(LPError::StatusIncorrect);
+        // }
 
-        state_lp.lock = true;
+        // state_lp.lock = true;
 
         let token_pair = state_lp.token.clone();
         let balance0_res = self
@@ -274,7 +274,7 @@ impl LPService {
             .recv(token_pair.0.clone())
             .await;
         let Ok(balance0) = balance0_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self
@@ -283,7 +283,7 @@ impl LPService {
             .recv(token_pair.1.clone())
             .await;
         let Ok(balance1) = balance1_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let liquidity = self.vft_service.balance_of(exec::program_id());
@@ -291,16 +291,16 @@ impl LPService {
         let fee_on = self._mint_fee(reserve0, reserve1).await?;
         let total_supply = self.vft_service.total_supply().clone();
 
-        // let amount0 = liquidity * balance0 / total_supply;
-        let amount0 = liquidity
-            .checked_mul(balance0)
-            .and_then(|v| v.checked_div(total_supply))
-            .ok_or(LPError::Overflow)?;
-        // let amount1 = liquidity * balance1 / total_supply;
-        let amount1 = liquidity
-            .checked_mul(balance1)
-            .and_then(|v| v.checked_div(total_supply))
-            .ok_or(LPError::Overflow)?;
+        let amount0 = liquidity * balance0 / total_supply;
+        // let amount0 = liquidity
+        //     .checked_mul(balance0)
+        //     .and_then(|v| v.checked_div(total_supply))
+        //     .ok_or(LPError::Overflow)?;
+        let amount1 = liquidity * balance1 / total_supply;
+        // let amount1 = liquidity
+        //     .checked_mul(balance1)
+        //     .and_then(|v| v.checked_div(total_supply))
+        //     .ok_or(LPError::Overflow)?;
 
         if amount0 == U256::zero() || amount1 == U256::zero() {
             return Err(LPError::InsufficientLiquidityBurned);
@@ -308,12 +308,12 @@ impl LPService {
         self._burn(exec::program_id(), liquidity);
         let transfer_a_res = self._safe_transfer(token_pair.0.clone(), to, amount0).await;
         if transfer_a_res.is_err() {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::TransferFailed);
         }
         let transfer_b_res = self._safe_transfer(token_pair.1.clone(), to, amount1).await;
         if transfer_b_res.is_err() {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::TransferFailed);
         }
         let balance0_after_res = self
@@ -322,7 +322,7 @@ impl LPService {
             .recv(token_pair.0.clone())
             .await;
         let Ok(balance0_after) = balance0_after_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_after_res = self
@@ -331,14 +331,14 @@ impl LPService {
             .recv(token_pair.1.clone())
             .await;
         let Ok(balance1_after) = balance1_after_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let _ = self._update((balance0_after, balance1_after), (reserve0, reserve1));
         if fee_on {
             state_lp.k_last = state_lp.reserve.0.checked_mul(state_lp.reserve.1).unwrap();
         }
-        state_lp.lock = false;
+        // state_lp.lock = false;
         self.emit_event(LPEvent::Burn {
             sender: msg::source(),
             amount: (amount0, amount1),
@@ -365,28 +365,28 @@ impl LPService {
         }
         let state_lp = StateLp::get_mut();
 
-        if state_lp.lock {
-            return Err(LPError::StatusIncorrect);
-        }
+        // if state_lp.lock {
+        //     return Err(LPError::StatusIncorrect);
+        // }
 
         let token_pair = state_lp.token.clone();
 
         if to == token_pair.0 || to == token_pair.1 {
             return Err(LPError::InvalidTo);
         }
-        state_lp.lock = true;
+        // state_lp.lock = true;
 
         if amount0_out > U256::zero() {
             let transfer_res = self._safe_transfer(token_pair.0, to, amount0_out).await;
             if transfer_res.is_err() {
-                state_lp.lock = false;
+                // state_lp.lock = false;
                 return Err(LPError::TransferFailed);
             }
         }
         if amount1_out > U256::zero() {
             let transfer_res = self._safe_transfer(token_pair.1, to, amount1_out).await;
             if transfer_res.is_err() {
-                state_lp.lock = false;
+                // state_lp.lock = false;
                 return Err(LPError::TransferFailed);
             }
         }
@@ -396,7 +396,7 @@ impl LPService {
             .recv(token_pair.0.clone())
             .await;
         let Ok(balance0) = balance0_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self
@@ -405,7 +405,7 @@ impl LPService {
             .recv(token_pair.1.clone())
             .await;
         let Ok(balance1) = balance1_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let remain_0 = reserve0.checked_sub(amount0_out).ok_or(LPError::Overflow)?;
@@ -421,28 +421,28 @@ impl LPService {
             U256::zero()
         };
         if amount0_in == U256::zero() && amount1_in == U256::zero() {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::InsufficientInputAmount);
         }
         // let balance0_adjusted = balance0 * U256::from(1000) - amount0_in * U256::from(3);
         let balance0_adjusted = balance0
-            .checked_mul(U256::from(1_000_000))
-            .and_then(|v| v.checked_sub(amount0_in.checked_mul(U256::from(3_000)).unwrap()))
+            .checked_mul(U256::from(1_000))
+            .and_then(|v| v.checked_sub(amount0_in.checked_mul(U256::from(3)).unwrap()))
             .ok_or(LPError::Overflow)?;
         // let balance1_adjusted = balance1 * U256::from(1000) - amount1_in * U256::from(3);
         let balance1_adjusted = balance1
-            .checked_mul(U256::from(1_000_000))
-            .and_then(|v| v.checked_sub(amount1_in.checked_mul(U256::from(3_000)).unwrap()))
+            .checked_mul(U256::from(1_000))
+            .and_then(|v| v.checked_sub(amount1_in.checked_mul(U256::from(3)).unwrap()))
             .ok_or(LPError::Overflow)?;
         // balance0_adjusted * balance1_adjusted < reserve0 * reserve1 * U256::from(1_000_000 * 1_000_000)
         if balance0_adjusted.checked_mul(balance1_adjusted).unwrap()
             < reserve0
                 .checked_mul(reserve1)
                 .unwrap()
-                .checked_mul(U256::from(1_000_000 * 1_000_000))
+                .checked_mul(U256::from(1_000 * 1_000))
                 .unwrap()
         {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::KConstant);
         }
         let _ = self._update((balance0, balance1), (reserve0, reserve1));
@@ -454,7 +454,7 @@ impl LPService {
             to,
         })
         .unwrap();
-        state_lp.lock = false;
+        // state_lp.lock = false;
         Ok(())
     }
 
@@ -466,11 +466,11 @@ impl LPService {
             return Err(LPError::Unauthorized);
         }
 
-        if state_lp.lock {
-            return Err(LPError::StatusIncorrect);
-        }
+        // if state_lp.lock {
+        //     return Err(LPError::StatusIncorrect);
+        // }
 
-        state_lp.lock = true;
+        // state_lp.lock = true;
 
         let token_pair = state_lp.token.clone();
         let balance0_res = self
@@ -479,7 +479,7 @@ impl LPService {
             .recv(token_pair.0.clone())
             .await;
         let Ok(balance0) = balance0_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self
@@ -488,7 +488,7 @@ impl LPService {
             .recv(token_pair.1.clone())
             .await;
         let Ok(balance1) = balance1_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let transfer_a_res = self
@@ -499,7 +499,7 @@ impl LPService {
             )
             .await;
         if transfer_a_res.is_err() {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::TransferFailed);
         }
         let transfer_b_res = self
@@ -510,10 +510,10 @@ impl LPService {
             )
             .await;
         if transfer_b_res.is_err() {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::TransferFailed);
         }
-        state_lp.lock = false;
+        // state_lp.lock = false;
         self.emit_event(LPEvent::Skim {
             amount_a: (balance0 - reserve0),
             amount_b: (balance1 - reserve1),
@@ -531,11 +531,11 @@ impl LPService {
             return Err(LPError::Unauthorized);
         }
 
-        if state_lp.lock {
-            return Err(LPError::StatusIncorrect);
-        }
+        // if state_lp.lock {
+        //     return Err(LPError::StatusIncorrect);
+        // }
 
-        state_lp.lock = true;
+        // state_lp.lock = true;
 
         let token_pair = state_lp.token.clone();
         let balance0_res = self
@@ -544,7 +544,7 @@ impl LPService {
             .recv(token_pair.0.clone())
             .await;
         let Ok(balance0) = balance0_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let balance1_res = self
@@ -553,11 +553,11 @@ impl LPService {
             .recv(token_pair.1.clone())
             .await;
         let Ok(balance1) = balance1_res else {
-            state_lp.lock = false;
+            // state_lp.lock = false;
             return Err(LPError::CanNotConnectToVft);
         };
         let _ = self._update((balance0, balance1), (reserve0, reserve1));
-        state_lp.lock = false;
+        // state_lp.lock = false
         self.emit_event(LPEvent::Sync {
             reserve_a: state_lp.reserve.0,
             reserve_b: state_lp.reserve.1,
@@ -566,7 +566,7 @@ impl LPService {
         Ok(())
     }
 
-    pub async fn set_admin(&mut self, new_admin: ActorId) -> Result<(), LPError> {
+    pub fn set_admin(&mut self, new_admin: ActorId) -> Result<(), LPError> {
         let state_lp = StateLp::get_mut();
         if msg::source() != state_lp.admin {
             return Err(LPError::Unauthorized);
@@ -576,13 +576,23 @@ impl LPService {
         Ok(())
     }
 
-    pub async fn set_router(&mut self, new_router: ActorId) -> Result<(), LPError> {
+    pub fn set_router(&mut self, new_router: ActorId) -> Result<(), LPError> {
         let state_lp = StateLp::get_mut();
         if msg::source() != state_lp.admin {
             return Err(LPError::Unauthorized);
         }
         state_lp.router = new_router;
         self.emit_event(LPEvent::RouterSet(new_router)).unwrap();
+        Ok(())
+    }
+
+    pub fn unlock(&mut self) -> Result<(), LPError> {
+        let state_lp = StateLp::get_mut();
+        if msg::source() != state_lp.admin {
+            return Err(LPError::Unauthorized);
+        }
+        // state_lp.lock = false;
+        self.emit_event(LPEvent::Unlock).unwrap();
         Ok(())
     }
 
@@ -603,6 +613,10 @@ impl LPService {
     pub fn get_router(&self) -> ActorId {
         let state_lp = StateLp::get();
         state_lp.router
+    }
+    pub fn get_factory(&self) -> ActorId {
+        let state_lp = StateLp::get();
+        state_lp.factory
     }
 }
 

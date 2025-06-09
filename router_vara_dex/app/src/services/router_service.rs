@@ -11,7 +11,7 @@ use crate::clients::factory_vara_dex_client::FactoryService as FactoryServiceCli
 use crate::clients::lp_vara_dex_client::traits::LpService;
 use crate::clients::lp_vara_dex_client::LpService as LpServiceClient;
 use crate::states::router_state::{
-    self, PendingRefund, RouterError, RouterEvent, RouterState, ROUTER,
+    self, LiquidityJoin, PendingRefund, RouterError, RouterEvent, RouterState, ROUTER,
 };
 
 pub struct RouterService {
@@ -37,6 +37,7 @@ impl RouterService {
                 swap_fee_bps,
                 lock: false,
                 pending_liquidity: Default::default(),
+                liquidity_join: Default::default(),
             });
         }
     }
@@ -127,7 +128,7 @@ impl RouterService {
         if sender == ActorId::zero() || sender != router_state.admin {
             return Err(RouterError::IdenticalAddresses);
         }
-        let _ = msg::send_bytes(sender, b"Refund Vara", amount);
+        let _ = msg::send_bytes(sender, "Refund Vara".encode(), amount);
         Ok(true)
     }
 
@@ -303,6 +304,39 @@ impl RouterService {
         Ok(amounts)
     }
 
+    pub fn get_admin(&self) -> ActorId {
+        let state = RouterState::get();
+        state.admin
+    }
+    pub fn get_factory(&self) -> ActorId {
+        let state = RouterState::get();
+        state.factory_address
+    }
+    pub fn get_wvara(&self) -> ActorId {
+        let state = RouterState::get();
+        state.wvara_address
+    }
+    pub fn get_fund_addr(&self) -> ActorId {
+        let state = RouterState::get();
+        state.fund_addr
+    }
+    pub fn get_swap_fee_bps(&self) -> u128 {
+        let state = RouterState::get();
+        state.swap_fee_bps
+    }
+    pub fn get_lock(&self) -> bool {
+        let state = RouterState::get();
+        state.lock
+    }
+    pub fn get_liquidity_join(&self, user: ActorId) -> Vec<LiquidityJoin> {
+        let state = RouterState::get();
+        if let Some(join) = state.liquidity_join.get(&user) {
+            join.clone()
+        } else {
+            vec![]
+        }
+    }
+
     // private functions
     async fn _add_liquidity(
         &mut self,
@@ -359,7 +393,7 @@ impl RouterService {
             let swap_res = self
                 .lp_client
                 .swap(amount0_out, amount1_out, to)
-                .with_gas_limit(10_000_000_000)
+                // .with_gas_limit(10_000_000_000)
                 .send_recv(pair)
                 .await;
             if swap_res.is_err() {
@@ -379,7 +413,7 @@ impl RouterService {
         let send_token_res = self
             .vft_client
             .transfer_from(from, to, value)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(token)
             .await;
         let Ok(transfer_token_status) = send_token_res else {
@@ -401,7 +435,7 @@ impl RouterService {
         let transfer_wvara_res = self
             .vft_client
             .transfer(to, value)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(token)
             .await;
         let Ok(transfer_wvara_status) = transfer_wvara_res else {
@@ -420,7 +454,7 @@ impl RouterService {
         let deposit_res = self
             .vft_client
             .deposit()
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .with_value(vara_amount)
             .send_recv(wrapped_vara)
             .await;
@@ -440,7 +474,7 @@ impl RouterService {
         let withdraw_res = self
             .vft_client
             .withdraw(vara_amount)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(wrapped_vara)
             .await;
         let Ok(withdraw_status) = withdraw_res else {
@@ -494,13 +528,31 @@ impl RouterService {
         let skim_res = self
             .lp_client
             .skim(exec::program_id())
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(pair)
             .await;
         if skim_res.is_err() {
             return Err(RouterError::SkimPairLiquidityFailed);
         }
 
+        Ok(())
+    }
+
+    pub fn lock_router(&mut self) -> Result<(), RouterError> {
+        let router_state = RouterState::get_mut();
+        if msg::source() != router_state.admin {
+            return Err(RouterError::NotAdmin);
+        }
+        router_state.lock = true;
+        Ok(())
+    }
+
+    pub fn unlock_router(&mut self) -> Result<(), RouterError> {
+        let router_state = RouterState::get_mut();
+        if msg::source() != router_state.admin {
+            return Err(RouterError::NotAdmin);
+        }
+        router_state.lock = false;
         Ok(())
     }
 
@@ -538,20 +590,38 @@ impl RouterService {
         if router_state.lock {
             return Err(RouterError::IncorrectState);
         }
+
+        let pair_address = self.pair_for(token_a, token_b).await?;
+        if !pair_address.is_zero() {
+            return Err(RouterError::PairAlreadyExists);
+        }
         router_state.lock = true;
-        if self.pair_for(token_a, token_b).await?.is_zero() {
+
+        if pair_address.is_zero() {
             let create_fee = msg::value();
             let create_pair_res = self
                 .factory_client
                 .create_pair(token_a, token_b)
-                .with_gas_limit(10_000_000_000)
+                // .with_gas_limit(10_000_000_000)
                 .with_value(create_fee)
                 .send_recv(router_state.factory_address)
                 .await;
-            let Ok(pair_address) = create_pair_res.unwrap() else {
+            if create_pair_res.is_err() {
                 router_state.lock = false;
                 return Err(RouterError::CreatePairFailed);
-            };
+            }
+            let mut pair_address = ActorId::zero();
+            if let Ok(pair_address_unwrap) = create_pair_res {
+                if let Ok(pair_address_res) = pair_address_unwrap {
+                    pair_address = pair_address_res;
+                } else {
+                    router_state.lock = false;
+                    return Err(RouterError::CreatePairFailed);
+                }
+            } else {
+                router_state.lock = false;
+                return Err(RouterError::CreatePairFailed);
+            }
             router_state.lock = false;
             self.emit_event(RouterEvent::CreatePair {
                 token_a,
@@ -644,19 +714,49 @@ impl RouterService {
         );
 
         let pair = self.pair_for(token_a, token_b).await?;
+        if pair.is_zero() {
+            router_state.lock = false;
+            return Err(RouterError::PairNotFound);
+        }
+
+        // check if the pair is already in the liquidity_join map
+        if let Some(join) = router_state.liquidity_join.get_mut(&caller) {
+            if !join.iter().any(|x| x.pair == pair) {
+                join.push(LiquidityJoin {
+                    token_a,
+                    token_b,
+                    pair,
+                });
+            }
+        } else {
+            router_state.liquidity_join.insert(
+                caller,
+                vec![LiquidityJoin {
+                    token_a,
+                    token_b,
+                    pair,
+                }],
+            );
+        }
+
         let success_a = self
             ._transfer_from(token_a, msg::source(), pair, amount_a)
             .await
             .is_ok();
         if success_a {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == token_a)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == token_a)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == token_a) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::TransferAFailed);
@@ -666,14 +766,19 @@ impl RouterService {
             .await
             .is_ok();
         if success_b {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == token_b)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == token_b)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == token_b) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::TransferBFailed);
@@ -682,13 +787,25 @@ impl RouterService {
         let mint_liquidity_res = self
             .lp_client
             .mint(to)
-            .with_gas_limit(5_000_000_000)
+            // .with_gas_limit(5_000_000_000)
             .send_recv(pair)
             .await;
-        let Ok(liquidity) = mint_liquidity_res.unwrap() else {
+        if mint_liquidity_res.is_err() {
             router_state.lock = false;
             return Err(RouterError::MintLiquidityFailed);
-        };
+        }
+        let mut liquidity = U256::from(0);
+        if let Ok(liqui_res) = mint_liquidity_res {
+            if let Ok(liquidity_amount) = liqui_res {
+                liquidity = liquidity_amount;
+            } else {
+                router_state.lock = false;
+                return Err(RouterError::MintLiquidityFailed);
+            }
+        } else {
+            router_state.lock = false;
+            return Err(RouterError::MintLiquidityFailed);
+        }
         router_state.lock = false;
         // clean the temporary pending liquidity
         router_state.pending_liquidity.remove(&caller);
@@ -758,10 +875,31 @@ impl RouterService {
             return Err(RouterError::PairNotFound);
         }
 
+        // check if the pair is already in the liquidity_join map
+
+        if let Some(join) = router_state.liquidity_join.get_mut(&caller) {
+            if !join.iter().any(|x| x.pair == pair) {
+                join.push(LiquidityJoin {
+                    token_a: token,
+                    token_b: wrapped_vara,
+                    pair,
+                });
+            }
+        } else {
+            router_state.liquidity_join.insert(
+                caller,
+                vec![LiquidityJoin {
+                    token_a: token,
+                    token_b: wrapped_vara,
+                    pair,
+                }],
+            );
+        }
+
         let wrap_vara_res = self._wrap_vara(amount_vara.as_u128()).await;
         if wrap_vara_res.is_err() {
             router_state.lock = false;
-            let _ = msg::send_bytes_for_reply(caller, b"Refund Vara", amount_vara.as_u128(), 0);
+            let _ = msg::send_bytes(caller, "Refund Vara".encode(), amount_vara.as_u128());
             return Err(RouterError::DepositWVARAFailed);
         }
         // temporary pending liquidity
@@ -786,14 +924,19 @@ impl RouterService {
             .await
             .is_ok();
         if success_a {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == wrapped_vara)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == wrapped_vara)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == wrapped_vara) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::DepositWVARAFailed);
@@ -804,14 +947,19 @@ impl RouterService {
             .await
             .is_ok();
         if success_b {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == token)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == token)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == token) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::TransferBFailed);
@@ -821,16 +969,26 @@ impl RouterService {
         let liquidity_res = self
             .lp_client
             .mint(to)
-            .with_gas_limit(10_000_000_000)
+            // .with_gas_limit(10_000_000_000)
             .send_recv(pair)
             .await;
-        let Ok(liquidity) = liquidity_res.unwrap() else {
+
+        let mut liquidity = U256::from(0);
+        if let Ok(liqui_res) = liquidity_res {
+            if let Ok(liquidity_amount) = liqui_res {
+                liquidity = liquidity_amount;
+            } else {
+                router_state.lock = false;
+                return Err(RouterError::MintLiquidityFailed);
+            }
+        } else {
             router_state.lock = false;
             return Err(RouterError::MintLiquidityFailed);
-        };
+        }
+
         if amount_vara.as_u128() < msg::value() {
             let refund = msg::value() - amount_vara.as_u128();
-            let _ = msg::send_bytes_for_reply(msg::source(), b"Transfer Vara", refund, 0);
+            let _ = msg::send_bytes(msg::source(), "Transfer Vara".encode(), refund);
         }
         router_state.lock = false;
         // clean the temporary pending liquidity
@@ -890,13 +1048,14 @@ impl RouterService {
         let burn_res = self
             .lp_client
             .burn(exec::program_id())
-            .with_gas_limit(10_000_000_000)
+            // .with_gas_limit(10_000_000_000)
             .send_recv(pair)
             .await;
         let Ok((amount0, amount1)) = burn_res.unwrap() else {
             router_state.lock = false;
             return Err(RouterError::BurnLiquidityFailed);
         };
+
         let (token0, _) = self.sort_tokens(token, wrapped_vara)?;
         let (amount_token, amount_vara) = if token == token0 {
             (amount0, amount1)
@@ -932,34 +1091,44 @@ impl RouterService {
 
         let success_a = self._transfer(token, to, amount_token).await.is_ok();
         if success_a {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == token)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == token)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == token) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::TransferAFailed);
         }
         let unwrap_success = self._unwrap_vara(amount_vara).await.is_ok();
         if unwrap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == wrapped_vara)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == wrapped_vara)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == wrapped_vara) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::WithdrawWvaraFailed);
         }
         // send vara to user
-        let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", amount_vara.as_u128(), 0);
+        let _ = msg::send_bytes(to, "Transfer Vara".encode(), amount_vara.as_u128());
         router_state.lock = false;
         // clean the temporary pending liquidity
         router_state.pending_liquidity.remove(&caller);
@@ -1012,8 +1181,8 @@ impl RouterService {
         // Burn LP tokens
         let burn_res = self
             .lp_client
-            .burn(to)
-            .with_gas_limit(10_000_000_000)
+            .burn(exec::program_id())
+            // .with_gas_limit(10_000_000_000)
             .send_recv(pair)
             .await;
         let Ok((amount0, amount1)) = burn_res.unwrap() else {
@@ -1057,28 +1226,38 @@ impl RouterService {
 
         let success_a = self._transfer(token_a, to, amount_a).await.is_ok();
         if success_a {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == token_a)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == token_a)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == token_a) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::TransferAFailed);
         }
         let success_b = self._transfer(token_b, to, amount_b).await.is_ok();
         if success_b {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == token_b)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == token_b)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == token_b) {
+                    entry.refunded = true;
+                }
+            }
         } else {
             router_state.lock = false;
             return Err(RouterError::TransferBFailed);
@@ -1175,14 +1354,19 @@ impl RouterService {
             return Err(RouterError::SwapFailed);
         }
         if transfer_success && swap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == path[0].clone())
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == path[0].clone())
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == path[0].clone()) {
+                    entry.refunded = true;
+                }
+            }
         }
 
         router_state.lock = false;
@@ -1269,14 +1453,19 @@ impl RouterService {
         }
 
         if transfer_success && swap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == path[0].clone())
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == path[0].clone())
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == path[0].clone()) {
+                    entry.refunded = true;
+                }
+            }
         }
 
         router_state.lock = false;
@@ -1332,7 +1521,7 @@ impl RouterService {
         let wrap_res = self._wrap_vara(vara_amount).await;
         if wrap_res.is_err() {
             router_state.lock = false;
-            let _ = msg::send_bytes_for_reply(caller, b"Refund Vara", vara_amount, 0);
+            let _ = msg::send_bytes(caller, "Refund Vara".encode(), vara_amount);
             return Err(RouterError::DepositWVARAFailed);
         }
 
@@ -1361,14 +1550,19 @@ impl RouterService {
             return Err(RouterError::SwapFailed);
         }
         if transfer_success && swap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == wrapped_vara)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == wrapped_vara)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == wrapped_vara) {
+                    entry.refunded = true;
+                }
+            }
         }
 
         router_state.lock = false;
@@ -1459,17 +1653,22 @@ impl RouterService {
             return Err(RouterError::WithdrawWvaraFailed);
         }
         if transfer_success && swap_success && unwrap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == path[0].clone())
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == path[0].clone())
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == path[0].clone()) {
+                    entry.refunded = true;
+                }
+            }
         }
 
-        let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", amount_vara_out.as_u128(), 0);
+        let _ = msg::send_bytes(to, "Transfer Vara".encode(), amount_vara_out.as_u128());
 
         router_state.lock = false;
         // clean the temporary pending liquidity
@@ -1559,17 +1758,22 @@ impl RouterService {
         }
 
         if transfer_success && swap_success && unwrap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == path[0].clone())
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == path[0].clone())
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == path[0].clone()) {
+                    entry.refunded = true;
+                }
+            }
         }
 
-        let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", amount_vara_out.as_u128(), 0);
+        let _ = msg::send_bytes(to, "Transfer Vara".encode(), amount_vara_out.as_u128());
 
         router_state.lock = false;
         // clean the temporary pending liquidity
@@ -1623,7 +1827,7 @@ impl RouterService {
         let wrap_res = self._wrap_vara(amounts[0].as_u128()).await;
         if wrap_res.is_err() {
             router_state.lock = false;
-            let _ = msg::send_bytes_for_reply(caller, b"Refund Vara", vara_amount, 0);
+            let _ = msg::send_bytes(caller, "Refund Vara".encode(), vara_amount);
             return Err(RouterError::DepositWVARAFailed);
         }
 
@@ -1652,21 +1856,26 @@ impl RouterService {
             return Err(RouterError::SwapFailed);
         }
         if dep_success && swap_success {
-            router_state
-                .pending_liquidity
-                .get_mut(&caller)
-                .unwrap()
-                .iter_mut()
-                .find(|x| x.token_addr == wrapped_vara)
-                .unwrap()
-                .refunded = true;
+            // router_state
+            //     .pending_liquidity
+            //     .get_mut(&caller)
+            //     .unwrap()
+            //     .iter_mut()
+            //     .find(|x| x.token_addr == wrapped_vara)
+            //     .unwrap()
+            //     .refunded = true;
+            if let Some(refs) = router_state.pending_liquidity.get_mut(&caller) {
+                if let Some(entry) = refs.iter_mut().find(|x| x.token_addr == wrapped_vara) {
+                    entry.refunded = true;
+                }
+            }
         }
 
         let amount_out = amounts[amounts.len() - 1];
         // Refund excess VARA
         if vara_amount > amounts[0].as_u128() {
             let refund_amount = vara_amount - amounts[0].as_u128();
-            let _ = msg::send_bytes_for_reply(to, b"Transfer Vara", refund_amount, 0);
+            let _ = msg::send_bytes(to, "Transfer Vara".encode(), refund_amount);
         }
 
         router_state.lock = false;

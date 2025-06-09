@@ -15,14 +15,21 @@ constructor {
 
 service FactoryService {
   CreatePair : (token_a: actor_id, token_b: actor_id) -> result (actor_id, FactoryError);
+  RemovePair : (token_a: actor_id, token_b: actor_id) -> result (null, FactoryError);
   SetAdmin : (new_admin: actor_id) -> result (null, FactoryError);
   SetFeeTo : (new_fee_to: actor_id) -> result (null, FactoryError);
   SetFeeToSetter : (new_fee_setter: actor_id) -> result (null, FactoryError);
   SetRouter : (router: actor_id) -> result (null, FactoryError);
+  UpdateCodeIdPair : (new_code_id_pair: code_id) -> result (null, FactoryError);
+  query GetAdmin : () -> actor_id;
+  query GetAllPairs : () -> vec struct { actor_id, actor_id };
+  query GetAllPairsAddress : () -> vec actor_id;
+  query GetCodeIdPair : () -> code_id;
   query GetFeeTo : () -> actor_id;
   query GetFeeToSetter : () -> actor_id;
   query GetPair : (token_a: actor_id, token_b: actor_id) -> actor_id;
   query GetPairLength : () -> u64;
+  query GetRouter : () -> actor_id;
 
   events {
     /// Should be returned from [`Action::CreatePair`].
@@ -42,6 +49,10 @@ service FactoryService {
     Pair: actor_id;
     RouterSet: actor_id;
     AdminSet: actor_id;
+    CodeIdPairUpdated: code_id;
+    PairRemoved: struct {
+      token_pair: struct { actor_id, actor_id }
+    };
   }
 };
 
