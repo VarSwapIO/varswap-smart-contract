@@ -1,4 +1,4 @@
-use sails_rs::calls::{Action, Call, Query};
+use sails_rs::calls::{Call, Query};
 use sails_rs::gstd::calls::GStdRemoting;
 use sails_rs::gstd::exec::{self, block_timestamp};
 use sails_rs::{collections::*, gstd::msg, prelude::*};
@@ -96,7 +96,7 @@ impl LpStakingService {
             token,
             amount: token_balance,
         })
-        .unwrap();
+        .ok();
         Ok(true)
     }
 
@@ -337,7 +337,7 @@ impl LpStakingService {
             total_lp_staked: user_info.amount,
             staked_token: state.staked_token,
         })
-        .unwrap();
+        .ok();
 
         Ok(true)
     }
@@ -410,7 +410,7 @@ impl LpStakingService {
             total_lp_staked: user_info.amount,
             staked_token: state.staked_token,
         })
-        .unwrap();
+        .ok();
 
         Ok(true)
     }
@@ -476,7 +476,7 @@ impl LpStakingService {
             total_lp_staked: user_info.amount,
             staked_token: state.staked_token,
         })
-        .unwrap();
+        .ok();
 
         Ok(true)
     }

@@ -80,7 +80,7 @@ impl FactoryService {
             return Err(FactoryError::BridgedAssetExist);
         }
         factory_state.bridged_assets.insert(token_address, BridgedAsset { name: name.clone(), symbol: symbol.clone(), decimals });
-        self.emit_event(FactoryEvent::BridgedAssetAdded { token_address, name: name.clone(), symbol: symbol.clone(), decimals }).unwrap();
+        self.emit_event(FactoryEvent::BridgedAssetAdded { token_address, name: name.clone(), symbol: symbol.clone(), decimals }).ok();
         Ok(BridgedAsset { name, symbol, decimals })
     }
 
@@ -91,7 +91,7 @@ impl FactoryService {
             return Err(FactoryError::Unauthorized);
         }
         factory_state.bridged_assets.remove(&token_address);
-        self.emit_event(FactoryEvent::BridgedAssetRemoved { token_address }).unwrap();
+        self.emit_event(FactoryEvent::BridgedAssetRemoved { token_address }).ok();
         Ok(())
     }
 
@@ -124,7 +124,7 @@ impl FactoryService {
         };
         factory_state.fee_to_setter = new_fee_setter;
         self.emit_event(FactoryEvent::FeeToSetterSet(new_fee_setter))
-            .unwrap();
+            .ok();
         Ok(())
     }
 
@@ -254,7 +254,7 @@ impl FactoryService {
             pair_address: pair_address.clone(),
             pair_number,
         })
-        .unwrap();
+        .ok();
 
         Ok(pair_address)
     }
@@ -266,7 +266,7 @@ impl FactoryService {
             return Err(FactoryError::Unauthorized);
         }
         factory_state.router = router;
-        self.emit_event(FactoryEvent::RouterSet(router)).unwrap();
+        self.emit_event(FactoryEvent::RouterSet(router)).ok();
         Ok(())
     }
 
@@ -277,7 +277,7 @@ impl FactoryService {
             return Err(FactoryError::Unauthorized);
         }
         factory_state.admin = new_admin;
-        self.emit_event(FactoryEvent::AdminSet(new_admin)).unwrap();
+        self.emit_event(FactoryEvent::AdminSet(new_admin)).ok();
         Ok(())
     }
 
@@ -288,7 +288,7 @@ impl FactoryService {
             return Err(FactoryError::Unauthorized);
         }
         factory_state.code_id_pair = new_code_id_pair;
-        self.emit_event(FactoryEvent::CodeIdPairUpdated(new_code_id_pair)).unwrap();
+        self.emit_event(FactoryEvent::CodeIdPairUpdated(new_code_id_pair)).ok();
         Ok(())
     }
     pub  fn remove_pair(&mut self, token_a: ActorId, token_b: ActorId) -> Result<(), FactoryError> {
@@ -303,7 +303,7 @@ impl FactoryService {
             (token_a, token_b)
         };
         factory_state.pairs.remove(&token_pair);
-        self.emit_event(FactoryEvent::PairRemoved { token_pair }).unwrap();
+        self.emit_event(FactoryEvent::PairRemoved { token_pair }).ok();
         Ok(())
     }
 

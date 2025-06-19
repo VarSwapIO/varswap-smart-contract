@@ -36,6 +36,10 @@ type LpError = enum {
   CanNotConnectToFactory,
   StatusIncorrect,
   Unauthorized,
+  EmitEventFailed,
+  InvalidReserves,
+  InvalidAmount,
+  InvalidAdmin,
 };
 
 constructor {
@@ -50,7 +54,6 @@ service LpService {
   Skim : (to: actor_id) -> result (null, LpError);
   Swap : (amount0_out: u256, amount1_out: u256, to: actor_id) -> result (null, LpError);
   Sync : () -> result (null, LpError);
-  Unlock : () -> result (null, LpError);
   Approve : (spender: actor_id, value: u256) -> bool;
   Transfer : (to: actor_id, value: u256) -> bool;
   TransferFrom : (from: actor_id, to: actor_id, value: u256) -> bool;
@@ -68,6 +71,10 @@ service LpService {
   events {
     LPMint: struct {
       to: actor_id,
+      amount: u256,
+    };
+    LPBurn: struct {
+      from: actor_id,
       amount: u256,
     };
     Mint: struct {
@@ -110,7 +117,6 @@ service LpService {
     };
     AdminSet: actor_id;
     RouterSet: actor_id;
-    Unlock;
     Approval: struct {
       owner: actor_id,
       spender: actor_id,

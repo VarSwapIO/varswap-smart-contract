@@ -38,6 +38,11 @@ pub enum LPEvent {
         to:ActorId,
         amount:U256
     },
+
+    LPBurn {
+        from: ActorId,
+        amount:U256,
+    },
   
     Mint {
         sender: ActorId,
@@ -80,7 +85,7 @@ pub enum LPEvent {
     },
     AdminSet(ActorId),
     RouterSet(ActorId),
-    Unlock,
+   
 }
 #[derive(Encode, Decode, TypeInfo, Debug)]
 #[codec(crate = gstd::codec)]
@@ -123,6 +128,10 @@ pub enum LPError {
     InvalidTo,
     CanNotConnectToFactory,
     StatusIncorrect,
-    Unauthorized
+    Unauthorized,
+    EmitEventFailed,
+    InvalidReserves,
+    InvalidAmount,
+    InvalidAdmin,
 }
 

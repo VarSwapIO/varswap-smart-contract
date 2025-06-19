@@ -126,9 +126,6 @@ impl<R: Remoting + Clone> traits::LpService for LpService<R> {
     fn sync(&mut self) -> impl Call<Output = Result<(), LpError>, Args = R::Args> {
         RemotingAction::<_, lp_service::io::Sync>::new(self.remoting.clone(), ())
     }
-    fn unlock(&mut self) -> impl Call<Output = Result<(), LpError>, Args = R::Args> {
-        RemotingAction::<_, lp_service::io::Unlock>::new(self.remoting.clone(), ())
-    }
     fn approve(
         &mut self,
         spender: ActorId,
@@ -288,20 +285,6 @@ pub mod lp_service {
         impl ActionIo for Sync {
             const ROUTE: &'static [u8] = &[
                 36, 76, 112, 83, 101, 114, 118, 105, 99, 101, 16, 83, 121, 110, 99,
-            ];
-            type Params = ();
-            type Reply = Result<(), super::LpError>;
-        }
-        pub struct Unlock(());
-        impl Unlock {
-            #[allow(dead_code)]
-            pub fn encode_call() -> Vec<u8> {
-                <Unlock as ActionIo>::encode_call(&())
-            }
-        }
-        impl ActionIo for Unlock {
-            const ROUTE: &'static [u8] = &[
-                36, 76, 112, 83, 101, 114, 118, 105, 99, 101, 24, 85, 110, 108, 111, 99, 107,
             ];
             type Params = ();
             type Reply = Result<(), super::LpError>;
@@ -512,6 +495,10 @@ pub mod lp_service {
                 to: ActorId,
                 amount: U256,
             },
+            LPBurn {
+                from: ActorId,
+                amount: U256,
+            },
             Mint {
                 sender: ActorId,
                 amount: (U256, U256),
@@ -552,7 +539,6 @@ pub mod lp_service {
             },
             AdminSet(ActorId),
             RouterSet(ActorId),
-            Unlock,
             Approval {
                 owner: ActorId,
                 spender: ActorId,
@@ -568,6 +554,7 @@ pub mod lp_service {
             const ROUTE: &'static [u8] = &[36, 76, 112, 83, 101, 114, 118, 105, 99, 101];
             const EVENT_NAMES: &'static [&'static [u8]] = &[
                 &[24, 76, 80, 77, 105, 110, 116],
+                &[24, 76, 80, 66, 117, 114, 110],
                 &[16, 77, 105, 110, 116],
                 &[16, 66, 117, 114, 110],
                 &[16, 83, 119, 97, 112],
@@ -576,7 +563,6 @@ pub mod lp_service {
                 &[16, 83, 107, 105, 109],
                 &[32, 65, 100, 109, 105, 110, 83, 101, 116],
                 &[36, 82, 111, 117, 116, 101, 114, 83, 101, 116],
-                &[24, 85, 110, 108, 111, 99, 107],
                 &[32, 65, 112, 112, 114, 111, 118, 97, 108],
                 &[32, 84, 114, 97, 110, 115, 102, 101, 114],
             ];
@@ -628,6 +614,10 @@ pub enum LpError {
     CanNotConnectToFactory,
     StatusIncorrect,
     Unauthorized,
+    EmitEventFailed,
+    InvalidReserves,
+    InvalidAmount,
+    InvalidAdmin,
 }
 
 pub mod traits {
@@ -680,7 +670,6 @@ pub mod traits {
             to: ActorId,
         ) -> impl Call<Output = Result<(), LpError>, Args = Self::Args>;
         fn sync(&mut self) -> impl Call<Output = Result<(), LpError>, Args = Self::Args>;
-        fn unlock(&mut self) -> impl Call<Output = Result<(), LpError>, Args = Self::Args>;
         fn approve(
             &mut self,
             spender: ActorId,
@@ -723,5 +712,5 @@ extern crate std;
 pub mod mockall {
     use super::*;
     use sails_rs::mockall::*;
-    mock! { pub LpService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::LpService for LpService<A> { type Args = A; fn burn (&mut self, to: ActorId,) -> MockCall<A, Result<(U256,U256,), LpError>>;fn mint (&mut self, to: ActorId,) -> MockCall<A, Result<U256, LpError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), LpError>>;fn set_router (&mut self, new_router: ActorId,) -> MockCall<A, Result<(), LpError>>;fn skim (&mut self, to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn swap (&mut self, amount0_out: U256,amount1_out: U256,to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn sync (&mut self, ) -> MockCall<A, Result<(), LpError>>;fn unlock (&mut self, ) -> MockCall<A, Result<(), LpError>>;fn approve (&mut self, spender: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer (&mut self, to: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer_from (&mut self, from: ActorId,to: ActorId,value: U256,) -> MockCall<A, bool>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_factory (& self, ) -> MockQuery<A, ActorId>;fn get_reserves (& self, ) -> MockQuery<A, (U256,U256,u64,)>;fn get_router (& self, ) -> MockQuery<A, ActorId>;fn allowance (& self, owner: ActorId,spender: ActorId,) -> MockQuery<A, U256>;fn balance_of (& self, account: ActorId,) -> MockQuery<A, U256>;fn decimals (& self, ) -> MockQuery<A, u8>;fn name (& self, ) -> MockQuery<A, String>;fn symbol (& self, ) -> MockQuery<A, String>;fn total_supply (& self, ) -> MockQuery<A, U256>; } }
+    mock! { pub LpService<A> {} #[allow(refining_impl_trait)] #[allow(clippy::type_complexity)] impl<A> traits::LpService for LpService<A> { type Args = A; fn burn (&mut self, to: ActorId,) -> MockCall<A, Result<(U256,U256,), LpError>>;fn mint (&mut self, to: ActorId,) -> MockCall<A, Result<U256, LpError>>;fn set_admin (&mut self, new_admin: ActorId,) -> MockCall<A, Result<(), LpError>>;fn set_router (&mut self, new_router: ActorId,) -> MockCall<A, Result<(), LpError>>;fn skim (&mut self, to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn swap (&mut self, amount0_out: U256,amount1_out: U256,to: ActorId,) -> MockCall<A, Result<(), LpError>>;fn sync (&mut self, ) -> MockCall<A, Result<(), LpError>>;fn approve (&mut self, spender: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer (&mut self, to: ActorId,value: U256,) -> MockCall<A, bool>;fn transfer_from (&mut self, from: ActorId,to: ActorId,value: U256,) -> MockCall<A, bool>;fn get_admin (& self, ) -> MockQuery<A, ActorId>;fn get_factory (& self, ) -> MockQuery<A, ActorId>;fn get_reserves (& self, ) -> MockQuery<A, (U256,U256,u64,)>;fn get_router (& self, ) -> MockQuery<A, ActorId>;fn allowance (& self, owner: ActorId,spender: ActorId,) -> MockQuery<A, U256>;fn balance_of (& self, account: ActorId,) -> MockQuery<A, U256>;fn decimals (& self, ) -> MockQuery<A, u8>;fn name (& self, ) -> MockQuery<A, String>;fn symbol (& self, ) -> MockQuery<A, String>;fn total_supply (& self, ) -> MockQuery<A, U256>; } }
 }
