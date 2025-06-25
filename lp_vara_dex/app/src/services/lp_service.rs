@@ -142,7 +142,7 @@ impl LPService {
         let fee_on = self._mint_fee(reserve0, reserve1).await?;
         let total_supply = Storage::total_supply().clone();
         let liquidity = if total_supply == U256::zero() {
-            // let mint_amount = (amount_0 * amount_1).integer_sqrt() - U256::from(MINIMUM_LIQUIDITY);
+          
             let mint_amount = amount_0
                 .checked_mul(amount_1)
                 .map(|v| v.integer_sqrt())
@@ -151,8 +151,7 @@ impl LPService {
             self._mint(ActorId::zero(), U256::from(MINIMUM_LIQUIDITY))?;
             mint_amount
         } else {
-            // let amount_0_min = amount_0 * total_supply / reserve0;
-            // let amount_1_min = amount_1 * total_supply / reserve1;
+          
             let amount_0_min = amount_0
                 .checked_mul(total_supply)
                 .and_then(|v| v.checked_div(reserve0))
@@ -210,12 +209,12 @@ impl LPService {
         let fee_on = self._mint_fee(reserve0, reserve1).await?;
         let total_supply = self.vft_service.total_supply().clone();
 
-        // let amount0 = liquidity * balance0 / total_supply;
+     
         let amount0 = liquidity
             .checked_mul(balance0)
             .and_then(|v| v.checked_div(total_supply))
             .ok_or(LPError::Overflow)?;
-        // let amount1 = liquidity * balance1 / total_supply;
+       
         let amount1 = liquidity
             .checked_mul(balance1)
             .and_then(|v| v.checked_div(total_supply))
@@ -332,7 +331,7 @@ impl LPService {
         if amount0_in == U256::zero() && amount1_in == U256::zero() {
             return Err(LPError::InsufficientInputAmount);
         }
-        // let balance0_adjusted = balance0 * U256::from(1000) - amount0_in * U256::from(3);
+    
 
         let x_adjusted = amount0_in
             .checked_mul(U256::from(3))
@@ -342,7 +341,7 @@ impl LPService {
             .checked_mul(U256::from(1_000))
             .and_then(|v| v.checked_sub(x_adjusted))
             .ok_or(LPError::Overflow)?;
-        // let balance1_adjusted = balance1 * U256::from(1000) - amount1_in * U256::from(3);
+        
         let y_adjusted = amount1_in
             .checked_mul(U256::from(3))
             .ok_or(LPError::Overflow)?;
@@ -350,7 +349,6 @@ impl LPService {
             .checked_mul(U256::from(1_000))
             .and_then(|v| v.checked_sub(y_adjusted))
             .ok_or(LPError::Overflow)?;
-        // balance0_adjusted * balance1_adjusted < reserve0 * reserve1 * U256::from(1_000_000 * 1_000_000)
 
 
         let left = balance0_adjusted.checked_mul(balance1_adjusted).ok_or(LPError::Overflow)?;
@@ -467,10 +465,6 @@ impl LPService {
 
     async fn _mint_fee(&mut self, reserve_0: U256, reserve_1: U256) -> Result<bool, LPError> {
         let state_lp = StateLp::get_mut();
-
-        if reserve_0.is_zero() || reserve_1.is_zero() {
-            return Err(LPError::InvalidReserves);
-        }
 
         let fee_to_res = self
             .factory_client
@@ -604,14 +598,14 @@ impl LPService {
         let block_timestamp = exec::block_timestamp() % 2u64.pow(32);
         let time_elapsed = block_timestamp.saturating_sub(state_lp.last_block_ts);
         if time_elapsed > 0 && reverse.0 != U256::zero() && reverse.1 != U256::zero() {
-            // state_lp.cumulative_price.0 += (reverse.1 / reverse.0) * U256::from(time_elapsed);
+          
             state_lp.cumulative_price.0 = reverse
                 .1
                 .checked_div(reverse.0)
                 .and_then(|v| v.checked_mul(U256::from(time_elapsed)))
                 .and_then(|v| state_lp.cumulative_price.0.checked_add(v))
                 .ok_or(LPError::Overflow)?;
-            // state_lp.cumulative_price.1 += (reverse.0 / reverse.1) * U256::from(time_elapsed);
+          
             state_lp.cumulative_price.1 = reverse
                 .0
                 .checked_div(reverse.1)
