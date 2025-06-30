@@ -1,0 +1,19 @@
+[package]
+name = "tests"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+gclient.workspace = true
+gear-core.workspace = true
+sails-rs = { workspace = true, features = ["gtest"] }
+tokio.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+sails-rs = { workspace = true, features = ["gtest"] }
+router_vara_dex = { workspace = true }
+client.workspace = true
+tokio.workspace = true
+gclient.workspace = true
+gear-core.workspace = true

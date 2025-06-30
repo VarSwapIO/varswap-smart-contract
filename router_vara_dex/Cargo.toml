@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "app", "wasm",
+    "app", "wasm","tests", "client"
 ]
 
 [workspace.package]
@@ -11,12 +11,14 @@ edition = "2021"
 license = "GPL-3.0"
 
 [workspace.dependencies]
-gstd = "1.8.0"
-gwasm-builder = { package = "gear-wasm-builder", version = "1.8.0" }
-gmeta = "1.8.0"
-gclient = "1.8.0"
-gtest = "1.8.0"
-gear-core = "1.8.0"
+router_vara_dex = { path = "app" }
+client = { path = "client" }
+gstd = "=1.8.0"
+gtest = "=1.8.0"
+gclient = "=1.8.0"
+gear-core = "=1.8.0"
+gwasm-builder = { package = "gear-wasm-builder", version = "=1.8.0" }
+mockall = "0.12"
 parity-scale-codec = { version = "3.6", default-features = false }
 sails-idl-gen = "=0.8.0"
 sails-client-gen = "=0.8.0"
@@ -28,7 +30,8 @@ log = "*"
 env_logger = "*"
 serde = "1.0"
 serde-json = { package = "serde_json", version = "1.0" }
-syn = { version = "2", default-features = false }
+syn = "2.0"
 thiserror = "1.0"
-tokio = "1.36"
+tokio = { version = "1.41", features = ["rt", "macros"] }
 trybuild = "1"
+tempfile = "3"
