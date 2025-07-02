@@ -47,8 +47,12 @@ pub fn path_to_opt_wasm_target() -> String {
 pub fn workspace_cargo_toml_path() -> PathBuf {
     // Path where the file "Cargo.toml" is located (points to the root of the crate)
     // 'CARGO_MANIFEST_DIR' specifies this directory in env::var
-    let cargo_toml_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let cargo_toml_path = crate_cargo_toml_path();
     cargo_toml_path.parent()
-        .unwrap()
-        .to_path_buf()
+    .unwrap()
+    .to_path_buf()
+}
+
+pub fn crate_cargo_toml_path() -> PathBuf {
+    PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
 }

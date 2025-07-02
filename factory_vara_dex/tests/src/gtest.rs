@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use std::{path::PathBuf, env};
-    // use gstd::{ActorId, CodeId};
     use sails_rs::{
         calls::{Activation, Call, Query}, futures::future::Remote, gtest::{calls::*, System}, prelude::*
     };
@@ -25,56 +24,12 @@ mod tests {
     };
 
     use crate::utils;
-
-    // use factory_vara_dex::clients::{
-    //     factory_vara_dex_client::{
-    //         traits::{FactoryService as FS, FactoryVaraDexFactory as _},
-    //         *,
-    //     },
-    //     wvara_client::{traits::WvaraVftFactory as __, *},
-    // };
-
+    
     const ADMIN_ID: u64 = 10;
     const USER_ID: u64 = 11;
     const FEE_TO_SETTER_ID: u64 = 12;
     const FEE_TO_ID: u64 = 13;
     const ROUTER_ID: u64 = 14;
-
-    // fn init_system() -> System {
-    //     let system = System::new();
-    //     system.init_logger();
-    //     system.mint_to(ADMIN_ID, 1000000000000000);
-    //     system.mint_to(USER_ID, 1_000_000_000_000_000);
-    //     system.mint_to(FEE_TO_SETTER_ID, 1_000_000_000_000_000);
-    //     system.mint_to(FEE_TO_ID, 1_000_000_000_000_000);
-    //     system
-    // }
-
-    // async fn init_factory(system: System) -> (GTestRemoting, ActorId) {
-    //     let remoting = GTestRemoting::new(system, ADMIN_ID.into());
-
-    //     let pair_code_id = remoting.system().submit_code_file(
-    //         "../../lp_vara_dex/target/wasm32-gear/release/application_builder.opt.wasm",
-    //     );
-    //     let factory_code_id = remoting
-    //         .system()
-    //         .submit_code_file("../target/wasm32-gear/release/application_builder.opt.wasm");
-
-    //     let factory_factory = FactoryVaraDexFactory::new(remoting.clone());
-
-    //     let factory_id = factory_factory
-    //         .new(
-    //             pair_code_id,
-    //             ADMIN_ID.into(),
-    //             ADMIN_ID.into(),
-    //             ADMIN_ID.into(),
-    //         )
-    //         .send_recv(factory_code_id, "init factory")
-    //         .await
-    //         .unwrap();
-
-    //     (remoting, factory_id)
-    // }
 
     async fn init_factory() -> (GTestRemoting, ActorId) {
         let (program_space, code_id) = utils::program_space_and_code_id(
@@ -222,178 +177,173 @@ mod tests {
         assert_eq!(admin, new_admin);
     }
 
-    async fn deploy_vft(remoting: &GTestRemoting, name: &str, symbol: &str) -> ActorId {
-        // let vft_code_id = remoting
-        //     .system()
-        //     .submit_code_file("tests/extended_vft.opt.wasm");
+    #[tokio::test]
+    async fn test_bridged_assets() {
+        let (program_space, factory_id) = init_factory().await;
+        let mut client = FactoryDexClient::new(program_space);
 
-        // let vft_factory = WvaraVftFactory::new(remoting.clone());
-        // vft_factory
-        //     .new(name.to_string(), symbol.to_string(), 18)
-        //     .send_recv(vft_code_id, "init vft")
-        //     .await
-        //     .unwrap()
+        let token_address: ActorId = 100.into();
+        let name = "Bridged Token".to_string();
+        let symbol = "BTK".to_string();
+        let decimals = 6;
 
-        let vft_factory_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-            .join("src")
-            .join("extended_vft.opt.wasm");
-
-        let vft_code_id = remoting
-            .system()
-            .submit_code_file(vft_factory_path);
-
-        let factory = FactoryWVaraVft::new(remoting.clone()); //WvaraVftFactory::new(remoting);
-        let contract_id: ActorId = factory
-            .new(name.to_string(), symbol.to_string(), 18)
-            .send_recv(vft_code_id, format!("1234{}", name))
+        let bridged_asset = client
+            .add_bridged_asset(token_address, name.clone(), symbol.clone(), decimals)
+            .send_recv(factory_id)
             .await
+            .unwrap()
             .unwrap();
 
-        contract_id
-    }
+        assert_eq!(bridged_asset.name, name);
+        assert_eq!(bridged_asset.symbol, symbol);
+        assert_eq!(bridged_asset.decimals, decimals);
 
-    #[tokio::test]
-    async fn test_create_pair() {
-        // let system = init_system();
-        // let (remoting, factory_id) = init_factory(system).await;
-        // let mut factory = FactoryService::new(remoting.clone());
-
-        let (program_space, factory_id) = init_factory().await;
-        let mut client = FactoryDexClient::new(program_space.clone());
-
-        // Set router before creating pair
+        // Remove the bridged asset
         client
-            .set_router(ROUTER_ID.into())
+            .remove_bridged_asset(token_address)
             .send(factory_id)
             .await
             .unwrap();
 
-        let token_a_id = deploy_vft(&program_space.clone(), "Token A", "TKA").await;
-        let token_b_id = deploy_vft(&program_space.clone(), "Token B", "TKB").await;
-
-        println!("token_a_id: {:?}", token_a_id);
-        println!("token_b_id: {:?}", token_b_id);
-
-        let temp = client
-            .create_pair(token_a_id, token_b_id)
+        // Adding it again should be successful
+        let bridged_asset_again = client
+            .add_bridged_asset(token_address, name.clone(), symbol.clone(), decimals)
             .send_recv(factory_id)
-            .await;
-
-        let pair_address = match temp {
-            Ok(res) => res,
-            Err(error) => std::panic!("Error: {}", error.to_string())
-        };
-
-        println!("pair_address: {:?}", pair_address);
-
-        // println!("{:?}", pair_address.unwrap());
-
-
-        // assert!(!pair_address.is_zero());
-
-        let pair_length = client.get_pair_length().recv(factory_id).await.unwrap();
-        assert_eq!(pair_length, 1);
-
-        // let retrieved_pair_address = client
-        //     .get_pair(token_a_id, token_b_id)
-        //     .recv(factory_id)
-        //     .await
-        //     .unwrap();
-        // assert_eq!(retrieved_pair_address, pair_address);
-
-        // let all_pairs = client.get_all_pairs().recv(factory_id).await.unwrap();
-        // let (p_a, p_b) = all_pairs[0];
-        // let token_pair = if token_b_id > token_a_id {
-        //     (token_b_id, token_a_id)
-        // } else {
-        //     (token_a_id, token_b_id)
-        // };
-        // assert_eq!((p_a, p_b), token_pair);
-
-        // let all_pairs_address = client
-        //     .get_all_pairs_address()
-        //     .recv(factory_id)
-        //     .await
-        //     .unwrap();
-        // assert_eq!(all_pairs_address[0], pair_address);
-
-        // // Test creating same pair again should fail
-        // let res = client
-        //     .create_pair(token_a_id, token_b_id)
-        //     .send_recv(factory_id)
-        //     .await;
-        // assert!(res.is_err());
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(bridged_asset_again.name, name);
     }
 
-    // #[tokio::test]
-    // async fn test_bridged_assets() {
-    //     let system = init_system();
-    //     let (remoting, factory_id) = init_factory(system).await;
-    //     let mut factory = FactoryService::new(remoting);
+    #[tokio::test]
+    async fn test_manual_pair_management() {
+        let (program_space, factory_id) = init_factory().await;
+        let mut client = FactoryDexClient::new(program_space);
 
-    //     let token_address: ActorId = 100.into();
-    //     let name = "Bridged Token".to_string();
-    //     let symbol = "BTK".to_string();
-    //     let decimals = 6;
+        let token_a: ActorId = 200.into();
+        let token_b: ActorId = 201.into();
+        let pair_address: ActorId = 300.into();
 
-    //     let bridged_asset = factory
-    //         .add_bridged_asset(token_address, name.clone(), symbol.clone(), decimals)
-    //         .send_recv(factory_id)
+        let added_pair_address = client
+            .add_pair(token_a, token_b, pair_address)
+            .send_recv(factory_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(added_pair_address, pair_address);
+
+        let mut pair_length = client.get_pair_length().recv(factory_id).await.unwrap();
+        assert_eq!(pair_length, 1);
+
+        client
+            .remove_pair(token_a, token_b)
+            .send_recv(factory_id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        pair_length = client.get_pair_length().recv(factory_id).await.unwrap();
+        assert_eq!(pair_length, 0);
+    }
+
+
+
+
+    // IMPORTANT <-----------------------------
+
+    // Tests which contracts generate other contracts, have communication with other contracts, etc., need to be in node tests (gclient - integration tests)
+    // gtest is used to verify only the contract code itself (gtest - unit tests)
+
+    // async fn deploy_vft(remoting: &GTestRemoting, name: &str, symbol: &str) -> ActorId {
+
+
+    //     let vft_factory_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+    //         .join("src")
+    //         .join("extended_vft.opt.wasm");
+
+    //     let vft_code_id = remoting
+    //         .system()
+    //         .submit_code_file(vft_factory_path);
+
+    //     let factory = FactoryWVaraVft::new(remoting.clone()); //WvaraVftFactory::new(remoting);
+    //     let contract_id: ActorId = factory
+    //         .new(name.to_string(), symbol.to_string(), 18)
+    //         .send_recv(vft_code_id, format!("1234{}", name))
     //         .await
-    //         .unwrap()
     //         .unwrap();
 
-    //     assert_eq!(bridged_asset.name, name);
-    //     assert_eq!(bridged_asset.symbol, symbol);
-    //     assert_eq!(bridged_asset.decimals, decimals);
+    //     contract_id
+    // }
 
-    //     // Remove the bridged asset
-    //     factory
-    //         .remove_bridged_asset(token_address)
+    // #[tokio::test]
+    // async fn test_create_pair() {
+    //     // let system = init_system();
+    //     // let (remoting, factory_id) = init_factory(system).await;
+    //     // let mut factory = FactoryService::new(remoting.clone());
+
+    //     let (program_space, factory_id) = init_factory().await;
+    //     let mut client = FactoryDexClient::new(program_space.clone());
+
+    //     // Set router before creating pair
+    //     client
+    //         .set_router(ROUTER_ID.into())
     //         .send(factory_id)
     //         .await
     //         .unwrap();
 
-    //     // Adding it again should be successful
-    //     let bridged_asset_again = factory
-    //         .add_bridged_asset(token_address, name.clone(), symbol.clone(), decimals)
+    //     let token_a_id = deploy_vft(&program_space.clone(), "Token A", "TKA").await;
+    //     let token_b_id = deploy_vft(&program_space.clone(), "Token B", "TKB").await;
+
+        
+    //     let temp = client
+    //         .create_pair(token_a_id, token_b_id)
     //         .send_recv(factory_id)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
-    //     assert_eq!(bridged_asset_again.name, name);
-    // }
+    //         .await;
 
-    // #[tokio::test]
-    // async fn test_manual_pair_management() {
-    //     let system = init_system();
-    //     let (remoting, factory_id) = init_factory(system).await;
-    //     let mut factory = FactoryService::new(remoting);
+    //     let pair_address: Result<ActorId, FactoryError> = match temp {
+    //         Ok(res) => res,
+    //         Err(error) => std::panic!("Error: {}", error.to_string())
+    //     };
 
-    //     let token_a: ActorId = 200.into();
-    //     let token_b: ActorId = 201.into();
-    //     let pair_address: ActorId = 300.into();
+    //     assert!(pair_address.is_ok());
 
-    //     let added_pair_address = factory
-    //         .add_pair(token_a, token_b, pair_address)
-    //         .send_recv(factory_id)
-    //         .await
-    //         .unwrap()
-    //         .unwrap();
+    //     println!("{:?}", pair_address.unwrap());
 
-    //     assert_eq!(added_pair_address, pair_address);
 
-    //     let mut pair_length = factory.get_pair_length().recv(factory_id).await.unwrap();
+    //     assert!(!pair_address.is_zero());
+
+    //     let pair_length = client.get_pair_length().recv(factory_id).await.unwrap();
     //     assert_eq!(pair_length, 1);
 
-    //     factory
-    //         .remove_pair(token_a, token_b)
-    //         .send_recv(factory_id)
+    //     let retrieved_pair_address = client
+    //         .get_pair(token_a_id, token_b_id)
+    //         .recv(factory_id)
     //         .await
-    //         .unwrap()
     //         .unwrap();
+    //     assert_eq!(retrieved_pair_address, pair_address);
 
-    //     pair_length = factory.get_pair_length().recv(factory_id).await.unwrap();
-    //     assert_eq!(pair_length, 0);
+    //     let all_pairs = client.get_all_pairs().recv(factory_id).await.unwrap();
+    //     let (p_a, p_b) = all_pairs[0];
+    //     let token_pair = if token_b_id > token_a_id {
+    //         (token_b_id, token_a_id)
+    //     } else {
+    //         (token_a_id, token_b_id)
+    //     };
+    //     assert_eq!((p_a, p_b), token_pair);
+
+    //     let all_pairs_address = client
+    //         .get_all_pairs_address()
+    //         .recv(factory_id)
+    //         .await
+    //         .unwrap();
+    //     assert_eq!(all_pairs_address[0], pair_address);
+
+    //     // Test creating same pair again should fail
+    //     let res = client
+    //         .create_pair(token_a_id, token_b_id)
+    //         .send_recv(factory_id)
+    //         .await;
+    //     assert!(res.is_err());
     // }
 }

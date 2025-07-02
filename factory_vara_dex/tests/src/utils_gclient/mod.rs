@@ -1,8 +1,13 @@
+use std::str::FromStr;
+
 use gclient::GearApi;
 use gear_core::ids::{MessageId, ProgramId};
-use sails_rs::{ActorId, Encode};
+use sails_rs::{ActorId, Encode, CodeId};
+use crate::utils;
 
 pub const USERS_STR: &[&str] = &["//John", "//Mike", "//Dan"];
+pub const ADMIN_ID: u64 = 10;
+pub const ROUTER_ID: u64 = 14;
 
 pub trait ApiUtils {
     fn get_actor_id(&self) -> ActorId;
@@ -47,15 +52,27 @@ pub async fn get_new_client(api: &GearApi, name: &str) -> GearApi {
     api.clone().with(name).expect("Unable to change signer.")
 }
 
-pub async fn init(api: &GearApi) -> (MessageId, ProgramId) {
-    let constructor = ("Name".to_string(), "Symbol".to_string(), 10_u8);
+pub async fn upload_factory_vara_dex(api: &GearApi) -> (MessageId, ProgramId) {
+    let filepath = utils::workspace_cargo_toml_path()
+        .join("target")
+        .join("wasm32-gear")
+        .join("release")
+        .join("application_builder.opt.wasm");
+
+    let constructor = (
+        CodeId::from_str("0x5e19577af7f15f5ed22d2e7e9243e803ebec514d793c5badd514ee280478624b").unwrap(), 
+        ActorId::from(ADMIN_ID),
+        ActorId::from(ADMIN_ID),
+        ActorId::from(ADMIN_ID)
+    );
+
     let request = ["New".encode(), constructor.encode()].concat();
 
-    let path = "../target/wasm32-gear/release/extended_vft.opt.wasm";
+    // let path = "./../../../target/wasm32-gear/release/application_builder.opt.wasm";
     let gas_info = api
         .calculate_upload_gas(
             None,
-            gclient::code_from_os(path).unwrap(),
+            gclient::code_from_os(filepath.clone()).unwrap(),
             request.clone(),
             0,
             true,
@@ -65,7 +82,45 @@ pub async fn init(api: &GearApi) -> (MessageId, ProgramId) {
 
     let (message_id, program_id, _hash) = api
         .upload_program_bytes(
-            gclient::code_from_os(path).unwrap(),
+            gclient::code_from_os(filepath).unwrap(),
+            gclient::now_micros().to_le_bytes(),
+            request,
+            gas_info.min_limit,
+            0,
+        )
+        .await
+        .expect("Error upload program bytes");
+
+    (message_id, program_id)
+}
+
+pub async fn upload_vft(api: &GearApi, name: &str, symbol: &str) -> (MessageId, ProgramId) {
+    let filepath = utils::crate_cargo_toml_path()
+        .join("src")
+        .join("extended_vft.opt.wasm");
+
+    let constructor = (
+        name,
+        symbol,
+        18
+    );
+
+    let request = ["New".encode(), constructor.encode()].concat();
+
+    let gas_info = api
+        .calculate_upload_gas(
+            None,
+            gclient::code_from_os(filepath.clone()).unwrap(),
+            request.clone(),
+            0,
+            true,
+        )
+        .await
+        .expect("Error calculate upload gas");
+
+    let (message_id, program_id, _hash) = api
+        .upload_program_bytes(
+            gclient::code_from_os(filepath).unwrap(),
             gclient::now_micros().to_le_bytes(),
             request,
             gas_info.min_limit,
@@ -79,8 +134,8 @@ pub async fn init(api: &GearApi) -> (MessageId, ProgramId) {
 
 #[macro_export]
 macro_rules! send_request {
-    (api: $api:expr, program_id: $program_id:expr, service_name: $name:literal, action: $action:literal, payload: ($($val:expr),*)) => {
-        $crate::send_request!(api: $api, program_id: $program_id, service_name: $name, action: $action, payload: ($($val),*), value: 0)
+    (api: $api:expr, program_id: $program_id:expr, service_name: $name:literal, action: $action:literal, payload: ($($val:expr),*) ) => {
+        $crate::send_request!(api: $api, program_id: $program_id, service_name: $name, action: $action, payload: ($($val),*), value: $value:expr)
     };
 
     (api: $api:expr, program_id: $program_id:expr, service_name: $name:literal, action: $action:literal, payload: ($($val:expr),*), value: $value:expr) => {

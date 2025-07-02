@@ -111,14 +111,14 @@ Build each contract to generate WASM binaries:
 
 ```bash
 cd <module>/app
-cargo build --release --target wasm32-unknown-unknown
+cargo build --release 
 ```
 
 For example:
 
 ```bash
 cd factory_vara_dex/app
-cargo build --release --target wasm32-unknown-unknown
+cargo build --release 
 ```
 
 Build TypeScript bindings (if available):
@@ -134,6 +134,9 @@ yarn build
 ## Testing
 
 Run Rust unit and integration tests:
+
+cargo test --release -- --include-ignored
+
 
 ```bash
 cd <module>/app
