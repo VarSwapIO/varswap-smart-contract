@@ -183,21 +183,6 @@ mod tests {
         assert_eq!(admin, new_admin);
     }
 
-    async fn deploy_vft(
-        remoting: GTestRemoting,
-        name: &str,
-        symbol: &str,
-        vft_code_id: CodeId,
-        salt: &str,
-    ) -> ActorId {
-        let vft_factory = WvaraVftFactory::new(remoting.clone());
-        vft_factory
-            .new(name.to_string(), symbol.to_string(), 18)
-            .send_recv(vft_code_id, salt.to_string())
-            .await
-            .unwrap()
-    }
-
     // #[tokio::test]
     // async fn test_add_liquidity() {
     //     let system = init_system();
