@@ -26,21 +26,21 @@ impl FactoryService {
                 bridged_assets: HashMap::new(),
         };
         seed_factory.bridged_assets.insert(
-            ActorId::from_str("0xb78e078fa0947e4e3a21f0edf7104f7208119d547cc91dc28dbc0d80cc072c0c").unwrap(), 
+            ActorId::from_str("0x46896891852a364d9fe38b52e4061da85a00f6118415715c40d86a1f4ca00414").unwrap(), 
             BridgedAsset {
             name: String::from_str("Wrapped USDC").unwrap(),
             symbol: String::from_str("WUSDC").unwrap(),
-            decimals: 18,
+            decimals: 6,
         });
         seed_factory.bridged_assets.insert(
-            ActorId::from_str("0x2156679a6147013e5217fa3b8210d0ce4986c54aaffcfa70c4a171c7a8b6afd9").unwrap(), 
+            ActorId::from_str("0x77e704ac1c6129d147ecc6b5ddadc80dd1945505bb9654b23e41153ed0737e49").unwrap(), 
             BridgedAsset {
             name: String::from_str("Wrapped USDT").unwrap(),
             symbol: String::from_str("WUSDT").unwrap(),
-            decimals: 18,
+            decimals: 6,
         });
         seed_factory.bridged_assets.insert(
-            ActorId::from_str("0xaa6bc2ad1b660f6e7aaf3cb3418e6f66fe8c78f55400051b1d8bef0483976a42").unwrap(), 
+            ActorId::from_str("0x1f2af47fa11e08e9a7e9bf81d84d166e425e1f13104690b33f4fd4c4ddca6709").unwrap(), 
             BridgedAsset {
             name: String::from_str("Wrapped Ethereum").unwrap(),
             symbol: String::from_str("WETH").unwrap(),
